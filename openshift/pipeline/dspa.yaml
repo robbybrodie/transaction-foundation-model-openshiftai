@@ -66,6 +66,4 @@ spec:
       pipelineDBName: mlpipeline
       pvcSize: 10Gi
       username: mlpipeline
-      passwordSecret:
-        name: ds-pipeline-db-nemo-tfm
-        key: password
+      # No passwordSecret specified — DSPA operator auto-generates the secret
