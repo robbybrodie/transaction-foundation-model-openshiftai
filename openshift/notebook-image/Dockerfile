@@ -24,13 +24,6 @@ ENV HOME=/opt/app-root/src
 # The Kubeflow Notebook Controller (RHOAI) expects the container to start
 # JupyterLab on port 8888. The NeMo base image defaults to /bin/bash, which
 # exits immediately when run without a TTY in a pod. Override that here.
-# The controller injects the OAuth proxy sidecar and adds --NotebookApp.base_url;
-# ServerApp settings are additive so setting them here is safe.
-CMD ["jupyter", "lab", \
-     "--port=8888", \
-     "--ip=0.0.0.0", \
-     "--no-browser", \
-     "--allow-root", \
-     "--ServerApp.allow_remote_access=True", \
-     "--ServerApp.token=''", \
-     "--ServerApp.password=''"]
+# NB_PREFIX is injected by the Notebook Controller (e.g. /notebook/nemo-tfm/nemo-tfm-workbench).
+# Using sh -c so the variable is expanded at runtime.
+CMD ["sh", "-c", "exec jupyter lab --port=8888 --ip=0.0.0.0 --no-browser --allow-root --ServerApp.allow_remote_access=True --ServerApp.token= --ServerApp.password= --ServerApp.base_url=${NB_PREFIX:-/}"]
