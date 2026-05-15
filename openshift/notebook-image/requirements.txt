@@ -1,0 +1,13 @@
+# Additional Python requirements for the Transaction Foundation Model workbench.
+# NeMo 25.09.01 already includes: PyTorch, NeMo, HuggingFace Transformers,
+# Jupyter, torchdata, CuPy, and core ML libraries.
+# Only packages NOT already present in the base image are listed here.
+
+# Downstream fraud-detection evaluation
+xgboost>=2.0
+
+# UMAP dimensionality reduction (notebook 04 embedding visualisation)
+umap-learn>=0.5
+
+# Notebook-based CI execution
+papermill>=2.6
