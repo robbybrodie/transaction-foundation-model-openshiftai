@@ -16,6 +16,11 @@ FROM nvcr.io/nvidia/nemo:25.09.01
 COPY requirements.txt /opt/app-root/src/requirements.txt
 RUN pip install --no-cache-dir -r /opt/app-root/src/requirements.txt
 
+# OpenShift runs containers as a random non-root UID. The NeMo base image
+# sets HOME=/root, which is not writable under the restricted-v2 SCC.
+# Point HOME at the PVC-backed mount so Jupyter can create its runtime dir.
+ENV HOME=/opt/app-root/src
+
 # The Kubeflow Notebook Controller (RHOAI) expects the container to start
 # JupyterLab on port 8888. The NeMo base image defaults to /bin/bash, which
 # exits immediately when run without a TTY in a pod. Override that here.
