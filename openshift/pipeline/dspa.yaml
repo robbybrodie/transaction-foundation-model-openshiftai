@@ -1,0 +1,71 @@
+# Data Science Pipelines Server — DataSciencePipelinesApplication CR
+# -------------------------------------------------------------------
+# Provisions the Kubeflow Pipelines 2.x (DSP 2.0) server stack in this namespace:
+#   - KFP API server
+#   - Persistence agent
+#   - Scheduled workflow controller
+#   - Kubeflow Pipelines UI
+#
+# RHOAI 3.3 ships Kubeflow Pipelines 2.5.0 (DSP 2.0).
+# apiVersion v1alpha1 is current for RHOAI 3.3.
+#
+# Source: RHOAI cloud service — Migrating to Data Science Pipelines 2.0
+# https://docs.redhat.com/en/documentation/red_hat_openshift_ai_cloud_service/1/html/working_with_data_science_pipelines/enabling-data-science-pipelines-2_ds-pipelines
+#
+# Prerequisites:
+#   - S3-compatible object storage bucket provisioned
+#   - Bucket credentials in a Kubernetes Secret (see secrets/ai-platform.template.env)
+#   oc get crd datasciencepipelinesapplications.opendatahub.io  # verify DSPO installed
+#
+# Apply:
+#   oc apply -f openshift/pipeline/dspa.yaml -n <your-namespace>
+#
+# Verify:
+#   oc get datasciencepipelinesapplication pipelines-definition -n <your-namespace>
+
+apiVersion: datasciencepipelinesapplications.opendatahub.io/v1
+kind: DataSciencePipelinesApplication
+metadata:
+  name: pipelines-definition
+  namespace: nemo-tfm
+spec:
+  apiServer:
+    # Enable the KFP API server
+    deploy: true
+    # Expose the API via a Route (required for the RHOAI dashboard integration)
+    enableSamplePipeline: false
+
+  persistenceAgent:
+    deploy: true
+
+  scheduledWorkflow:
+    deploy: true
+
+  # Object storage for pipeline artifacts (pipeline run metadata, outputs)
+  # The credentials Secret must exist before applying this CR.
+  # Create it from openshift/secrets/ai-platform.template.env
+  objectStorage:
+    externalStorage:
+      # S3-compatible endpoint (e.g. OpenShift Data Foundation, AWS S3, MinIO)
+      host: s3.us-west-2.amazonaws.com
+      port: ""                           # leave empty for default (443/80)
+      bucket: nemo-tfm-pipelines-e17c4943
+      scheme: https
+      secure: true
+      # Secret containing AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+      s3CredentialsSecret:
+        secretName: workbench-runtime-secret
+        accessKey: MODEL_REGISTRY_ACCESS_KEY
+        secretKey: MODEL_REGISTRY_SECRET_KEY
+
+  # Internal database for pipeline metadata (uses ephemeral MariaDB by default)
+  # For production, configure an external MySQL-compatible database here.
+  database:
+    mariaDB:
+      deploy: true
+      pipelineDBName: mlpipeline
+      pvcSize: 10Gi
+      username: mlpipeline
+      passwordSecret:
+        name: ds-pipeline-db-nemo-tfm
+        key: password

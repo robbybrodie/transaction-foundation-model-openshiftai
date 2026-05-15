@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+# Pre-commit hook: block commits containing common secret patterns.
+# Scans staged content (git diff --cached) for known credential formats.
+
+set -euo pipefail
+
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+STAGED=$(git diff --cached --name-only 2>/dev/null)
+
+if [ -z "${STAGED}" ]; then
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# 1. Block sensitive filenames from being staged at all
+# ---------------------------------------------------------------------------
+BLOCKED_NAME_PATTERNS=(
+    '\.env$'
+    '\.env\..*'
+    'kubeconfig'
+    '\.kubeconfig$'
+    'openshift-login\.sh'
+    'credentials\.yaml'
+    'secrets\.yaml'
+    'apikey\.yaml'
+)
+
+FILENAME_HITS=()
+for f in ${STAGED}; do
+    # Skip template files — they contain no real credentials and are
+    # intentionally tracked in git (e.g. openshift/secrets/*.template.yaml)
+    if echo "${f}" | grep -qiE '\.template\.' ; then
+        continue
+    fi
+    # Skip the secrets README — it documents the workflow, not credentials
+    if echo "${f}" | grep -qiE 'secrets/README\.md$'; then
+        continue
+    fi
+    for pat in "${BLOCKED_NAME_PATTERNS[@]}"; do
+        if echo "${f}" | grep -qiE "${pat}"; then
+            FILENAME_HITS+=("${f}  (matched filename pattern: ${pat})")
+        fi
+    done
+done
+
+# ---------------------------------------------------------------------------
+# 2. Scan staged content for secret patterns
+# ---------------------------------------------------------------------------
+# Patterns: AWS keys, OpenAI/Anthropic/generic sk- keys, JWTs (eyJ),
+#           GitHub tokens, OpenShift/Bearer tokens, generic high-entropy
+#           assignments that look like secrets.
+# Using parallel arrays for bash 3 compatibility (macOS ships bash 3.2).
+SECRET_LABELS=(
+    "AWS access key"
+    "AWS secret key"
+    "Generic sk- key (OpenAI/Anthropic/Stripe)"
+    "JWT / Bearer token"
+    "GitHub personal access token"
+    "GitHub Actions token"
+    "GitHub OAuth token"
+    "GitHub fine-grained PAT"
+    "OpenShift API token (sha256)"
+    "OpenShift oc login token"
+    "Generic password assignment"
+    "NGC API key"
+)
+SECRET_PATTERNS=(
+    'AKIA[0-9A-Z]{16}'
+    '(?i)aws.{0,20}secret.{0,20}[=:][[:space:]]*[A-Za-z0-9/+]{40}'
+    'sk-[A-Za-z0-9_-]{20,}'
+    'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'
+    'ghp_[A-Za-z0-9]{36,}'
+    'gha_[A-Za-z0-9]{36,}'
+    'gho_[A-Za-z0-9]{36,}'
+    'github_pat_[A-Za-z0-9_]{40,}'
+    'sha256~[A-Za-z0-9_-]{43}'
+    '(?i)oc[[:space:]]+login.{0,60}--token'
+    '(?i)(password|passwd|pwd)[[:space:]]*[=:][[:space:]]*["'"'"'][^"'"'"']{8,}["'"'"']'
+    '[Nn][Gg][Cc]_[A-Za-z0-9]{40,}'
+)
+
+CONTENT_HITS=()
+STAGED_DIFF=$(git diff --cached --unified=0 2>/dev/null || true)
+
+i=0
+while [ $i -lt ${#SECRET_LABELS[@]} ]; do
+    label="${SECRET_LABELS[$i]}"
+    pat="${SECRET_PATTERNS[$i]}"
+    # Use python3 for PCRE-compatible regex (macOS BSD grep lacks -P support)
+    matches=$(echo "${STAGED_DIFF}" | grep -E "^\+" | PATTERN="${pat}" python3 -c "
+import sys, re, os
+pat = os.environ['PATTERN']
+data = sys.stdin.read()
+m = re.search(pat, data)
+if m:
+    print(m.group(0))
+" 2>/dev/null || true)
+    if [ -n "${matches}" ]; then
+        CONTENT_HITS+=("${label}")
+    fi
+    i=$((i + 1))
+done
+
+# ---------------------------------------------------------------------------
+# 3. Report and block if anything found
+# ---------------------------------------------------------------------------
+FAILED=0
+
+if [ ${#FILENAME_HITS[@]} -gt 0 ]; then
+    echo -e "${RED}[pre-commit] BLOCKED: sensitive filename(s) staged:${NC}"
+    for hit in "${FILENAME_HITS[@]}"; do
+        echo -e "  ${YELLOW}  ${hit}${NC}"
+    done
+    FAILED=1
+fi
+
+if [ ${#CONTENT_HITS[@]} -gt 0 ]; then
+    echo -e "${RED}[pre-commit] BLOCKED: secret pattern(s) detected in staged content:${NC}"
+    for hit in "${CONTENT_HITS[@]}"; do
+        echo -e "  ${YELLOW}  ${hit}${NC}"
+    done
+    FAILED=1
+fi
+
+if [ "${FAILED}" -eq 1 ]; then
+    echo ""
+    echo -e "${RED}Commit aborted. Remove secrets before committing.${NC}"
+    echo "To bypass (only if you are certain this is a false positive):"
+    echo "  git commit --no-verify"
+    exit 1
+fi
+
+exit 0

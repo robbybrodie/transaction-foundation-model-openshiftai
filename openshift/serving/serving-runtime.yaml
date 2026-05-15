@@ -1,0 +1,63 @@
+# Model Serving Runtime — ServingRuntime CR
+# ------------------------------------------
+# Defines the container template for the model server.
+# KServe (v0.15, managed by RHOAI 3.3) reconciles this into a Deployment
+# when referenced by an InferenceService.
+#
+# RHOAI 3.3 ships built-in runtimes (vLLM GPU, vLLM CPU, Triton, MLServer, OpenVINO).
+# Define a custom ServingRuntime ONLY if none of the built-in runtimes meet your needs.
+# Check built-in runtimes first:
+#   oc get servingruntimes -n redhat-ods-applications
+#
+# This example uses the vLLM NVIDIA GPU runtime pattern for embedding extraction.
+# For inference/embedding from a safetensors checkpoint, vLLM is appropriate.
+#
+# RHOAI 3.3 serving mode: KServe RawDeployment (not Serverless/Knative)
+# Source: https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.3/html-single/deploying_models/index
+#
+# Apply:
+#   oc apply -f openshift/serving/serving-runtime.yaml -n <your-namespace>
+
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  name: nemo-tfm-serving-runtime
+  namespace: nemo-tfm
+  labels:
+    opendatahub.io/dashboard: "true"
+  annotations:
+    openshift.io/display-name: "NeMo Transaction Foundation Model Runtime"
+    opendatahub.io/template-name: "vllm-runtime"
+    opendatahub.io/template-display-name: "vLLM NVIDIA GPU ServingRuntime"
+spec:
+  supportedModelFormats:
+    - name: pytorch
+      version: "2"
+      autoSelect: true
+
+  multiModel: false
+
+  containers:
+    - name: kserve-container
+      # vLLM serves the safetensors checkpoint and exposes an OpenAI-compatible API
+      image: quay.io/modh/vllm:rhoai-2.20-cuda
+      command: ["python", "-m", "vllm.entrypoints.openai.api_server"]
+      args:
+        - "--model=/mnt/models"
+        - "--dtype=bfloat16"
+        - "--max-model-len=4096"
+        - "--served-model-name=transaction-foundation-model"
+        - "--port=8080"
+      ports:
+        - containerPort: 8080
+          protocol: TCP
+      resources:
+        requests:
+          cpu: "4"
+          memory: 24Gi
+          # GPU declared here only — do NOT repeat in InferenceService predictor
+          nvidia.com/gpu: "1"
+        limits:
+          cpu: "4"
+          memory: 24Gi
+          nvidia.com/gpu: "1"

@@ -1,0 +1,74 @@
+# RHOAI Workbench — Notebook CR
+# --------------------------------
+# The Kubeflow Notebook Controller (part of the RHOAI workbenches component)
+# reconciles this CR into a StatefulSet, Service, and Route.
+#
+# DO NOT add securityContext, serviceAccountName, or port definitions —
+# the controller injects these from the namespace SCC and platform defaults.
+#
+# Source: RHOAI 3.0 docs — Creating a workbench by using the Notebook CRD
+# https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.0/html/creating_a_workbench/api-workbench-creating_api-workbench
+#
+# Apply:
+#   oc apply -f openshift/workbench/notebook.yaml -n <your-namespace>
+
+apiVersion: kubeflow.org/v1
+kind: Notebook
+metadata:
+  name: nemo-tfm-workbench
+  namespace: nemo-tfm
+  labels:
+    app: nemo-tfm-workbench
+  annotations:
+    # Required: triggers oauth-proxy sidecar injection for SSO
+    notebooks.opendatahub.io/inject-oauth: 'true'
+    # Display name shown in the RHOAI dashboard
+    opendatahub.io/image-display-name: "NeMo Transaction Foundation Model"
+    openshift.io/display-name: "NeMo Transaction Foundation Model Workbench"
+    openshift.io/description: "Workbench for training and evaluating the transaction foundation model"
+    # Tracks which ImageStream tag is selected (populated by dashboard; set manually when using CLI)
+    notebooks.opendatahub.io/last-image-selection: "nemo-tfm-workbench:latest"
+    # Owner — set to the OpenShift username of the workbench owner
+    opendatahub.io/username: kube:admin
+    notebooks.opendatahub.io/oauth-logout-url: 'https://rhods-dashboard-redhat-ods-applications.apps.ocpai-demo.sandbox3438.opentlc.com/projects/nemo-tfm?notebookLogout=nemo-tfm-workbench'
+spec:
+  template:
+    spec:
+      containers:
+        - name: nemo-tfm-workbench
+          image: image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest
+          imagePullPolicy: Always
+          # Environment variables from the workbench runtime secret
+          # (operator mounts this into the container; do not set securityContext here)
+          envFrom:
+            - secretRef:
+                name: workbench-runtime-secret
+          resources:
+            requests:
+              cpu: "4"
+              memory: 32Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "8"
+              memory: 64Gi
+              nvidia.com/gpu: "1"
+          volumeMounts:
+            - name: workbench-data
+              mountPath: /opt/app-root/src
+      volumes:
+        - name: workbench-data
+          persistentVolumeClaim:
+            claimName: nemo-tfm-workbench-data
+---
+# PersistentVolumeClaim for workbench home directory
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nemo-tfm-workbench-data
+  namespace: nemo-tfm
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi

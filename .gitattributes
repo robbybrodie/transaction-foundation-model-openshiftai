@@ -1,1 +1,16 @@
 models/decoder-foundation-model/*.safetensors filter=lfs diff=lfs merge=lfs -text
+
+# --- Sensitive paths: excluded from git archive exports ---
+.env                  export-ignore
+.env.local            export-ignore
+.env.*                export-ignore
+secrets/              export-ignore
+**/*secret*           export-ignore
+**/*credential*       export-ignore
+**/*token*            export-ignore
+**/*apikey*           export-ignore
+**/credentials.yaml   export-ignore
+**/secrets.yaml       export-ignore
+kubeconfig            export-ignore
+*.kubeconfig          export-ignore
+openshift-login.sh    export-ignore

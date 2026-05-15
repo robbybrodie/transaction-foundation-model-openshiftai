@@ -1,0 +1,37 @@
+# Custom Workbench Image — ImageStream
+# -------------------------------------
+# Registers the NeMo-based workbench image with the RHOAI dashboard.
+# There is no NotebookImage CR — RHOAI watches for ImageStreams with the
+# label opendatahub.io/notebook-image: "true" in the project namespace.
+#
+# Source: RHOAI 3.0 docs — Creating a custom image by using the ImageStream CRD
+# https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.0/html/creating_a_workbench/api-custom-image-creating_api-workbench
+#
+# Build and push the image first:
+#   docker build -t <registry>/<namespace>/nemo-tfm-workbench:latest openshift/notebook-image/
+#   docker push <registry>/<namespace>/nemo-tfm-workbench:latest
+#
+# Then apply:
+#   oc apply -f openshift/notebook-image/imagestream.yaml -n <your-namespace>
+
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: nemo-tfm-workbench
+  namespace: nemo-tfm
+  labels:
+    # Required: makes this image selectable in the RHOAI dashboard workbench UI
+    opendatahub.io/notebook-image: "true"
+  annotations:
+    opendatahub.io/notebook-image-name: "NeMo Transaction Foundation Model"
+    opendatahub.io/notebook-image-desc: "NVIDIA NeMo 25.09 with transaction foundation model dependencies"
+    opendatahub.io/notebook-image-url: "https://docs.nvidia.com/nemo-framework/user-guide/latest/"
+    opendatahub.io/notebook-image-order: "1"
+spec:
+  lookupPolicy:
+    # local: true allows pods in this namespace to reference the image by
+    # ImageStream name instead of the full internal registry path.
+    local: true
+  # No tags defined here — the BuildConfig populates the :latest tag when
+  # the build completes. Do not add a DockerImage import tag; this ImageStream
+  # is a push target, not an import source.

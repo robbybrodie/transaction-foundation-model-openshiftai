@@ -1,0 +1,135 @@
+# Distributed Training — PyTorchJob CR (KFTO v1)
+# ------------------------------------------------
+# Runs the NeMo foundation model pretraining job across multiple GPU nodes
+# using the Kubeflow Training Operator (KFTO).
+#
+# RHOAI 3.3 supports PyTorchJob (kubeflow.org/v1) only.
+# The KFTO v2 TrainJob (trainer.kubeflow.org/v1alpha1) is NOT supported in RHOAI 3.3.
+#
+# Source: RHOAI 3.3 docs — Running Training Operator-based distributed training workloads
+# https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.3/html/working_with_distributed_workloads/running-kfto-based-distributed-training-workloads_distributed-workloads
+#
+# Prerequisites:
+#   oc get crd pytorchjobs.kubeflow.org    # verify KFTO is installed
+#
+# Apply:
+#   oc apply -f openshift/training/pytorchjob.yaml -n <your-namespace>
+#
+# Monitor:
+#   oc get pytorchjob nemo-tfm-pretrain -n <your-namespace>
+#   oc logs -f -l job-name=nemo-tfm-pretrain,replica-type=master -n <your-namespace>
+
+apiVersion: kubeflow.org/v1
+kind: PyTorchJob
+metadata:
+  name: nemo-tfm-pretrain
+  namespace: nemo-tfm
+spec:
+  pytorchReplicaSpecs:
+
+    # Master: rank-0 process — always exactly 1 replica
+    Master:
+      replicas: 1
+      restartPolicy: OnFailure
+      template:
+        metadata:
+          labels:
+            app: nemo-tfm-pretrain
+        spec:
+          # ServiceAccount with anyuid SCC grant — required because the NeMo
+          # container runs as uid 0 (root) by default, which OpenShift's default
+          # restricted-v2 SCC does not permit.
+          # Created by openshift/rbac/service-accounts.yaml.
+          serviceAccountName: nemo-tfm-training
+          containers:
+            - name: pytorch
+              # Use the same NeMo container as the workbench image
+              image: nvcr.io/nvidia/nemo:25.09.01
+              imagePullPolicy: IfNotPresent
+              command:
+                - torchrun
+                - scripts/train_decoder_model.py
+                - -c
+                - configs/pretrain_financial_decoder.yaml
+                - --dataset.data_path
+                - /data/decoder_corpus/train_corpus.txt
+                - --validation_dataset.data_path
+                - /data/decoder_corpus/val_corpus.txt
+              envFrom:
+                - secretRef:
+                    name: workbench-runtime-secret
+              resources:
+                requests:
+                  cpu: "8"
+                  memory: 64Gi
+                  nvidia.com/gpu: "1"
+                limits:
+                  cpu: "8"
+                  memory: 64Gi
+                  nvidia.com/gpu: "1"
+              volumeMounts:
+                - name: training-data
+                  mountPath: /data
+                - name: model-output
+                  mountPath: /workspace/models
+          volumes:
+            - name: training-data
+              persistentVolumeClaim:
+                claimName: nemo-tfm-training-data
+            - name: model-output
+              persistentVolumeClaim:
+                claimName: nemo-tfm-model-output
+          # Pull secret for nvcr.io — created from registry-credentials.yaml
+          imagePullSecrets:
+            - name: registry-pull-secret
+
+    # Worker: additional GPU nodes — set replicas to (total_nodes - 1)
+    # For single-node multi-GPU, set replicas: 0 and increase GPU count in Master
+    Worker:
+      replicas: 0
+      restartPolicy: OnFailure
+      template:
+        metadata:
+          labels:
+            app: nemo-tfm-pretrain
+        spec:
+          serviceAccountName: nemo-tfm-training
+          containers:
+            - name: pytorch
+              image: nvcr.io/nvidia/nemo:25.09.01
+              imagePullPolicy: IfNotPresent
+              command:
+                - torchrun
+                - scripts/train_decoder_model.py
+                - -c
+                - configs/pretrain_financial_decoder.yaml
+                - --dataset.data_path
+                - /data/decoder_corpus/train_corpus.txt
+                - --validation_dataset.data_path
+                - /data/decoder_corpus/val_corpus.txt
+              envFrom:
+                - secretRef:
+                    name: workbench-runtime-secret
+              resources:
+                requests:
+                  cpu: "8"
+                  memory: 64Gi
+                  nvidia.com/gpu: "1"
+                limits:
+                  cpu: "8"
+                  memory: 64Gi
+                  nvidia.com/gpu: "1"
+              volumeMounts:
+                - name: training-data
+                  mountPath: /data
+                - name: model-output
+                  mountPath: /workspace/models
+          volumes:
+            - name: training-data
+              persistentVolumeClaim:
+                claimName: nemo-tfm-training-data
+            - name: model-output
+              persistentVolumeClaim:
+                claimName: nemo-tfm-model-output
+          imagePullSecrets:
+            - name: registry-pull-secret

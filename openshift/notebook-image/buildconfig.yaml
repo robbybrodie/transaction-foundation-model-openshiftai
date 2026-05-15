@@ -1,0 +1,75 @@
+# Workbench Image Build — BuildConfig CR
+# ----------------------------------------
+# Builds the NeMo workbench container image from the Dockerfile in this repo
+# and pushes it to the integrated OpenShift image registry, tagged in the
+# nemo-tfm-workbench ImageStream.
+#
+# apiVersion build.openshift.io/v1 — verified against OCP 4.19 Builds using
+# BuildConfig documentation:
+# https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/builds_using_buildconfig/understanding-buildconfigs
+#
+# Strategy: Docker (not S2I) — the Dockerfile is a plain multi-layer build
+# from the NVIDIA NeMo base image; S2I requires a specially-prepared assemble
+# script and is not appropriate here.
+#
+# The builder SA has push rights to the internal registry automatically.
+# The dockerStrategy.pullSecret grants pull rights to nvcr.io for the base
+# image (FROM nvcr.io/nvidia/nemo:25.09.01).
+#
+# Apply:
+#   oc apply -f openshift/notebook-image/buildconfig.yaml -n <your-namespace>
+#
+# Trigger a build manually:
+#   oc start-build nemo-tfm-workbench -n <your-namespace> --follow
+#
+# Verify:
+#   oc get builds -l buildconfig=nemo-tfm-workbench -n <your-namespace>
+
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: nemo-tfm-workbench
+  namespace: nemo-tfm
+  labels:
+    app: nemo-tfm-workbench
+spec:
+  runPolicy: Serial
+
+  source:
+    type: Git
+    git:
+      # Replace with your fork/mirror URL.
+      # For private repos, add a sourceSecret referencing an SSH key or token.
+      uri: https://github.com/robbybrodie/transaction-foundation-model-openshiftai
+      ref: main
+    # contextDir is relative to the repo root.
+    # The builder uses this as the Docker build context; only files under
+    # this directory are sent to the build daemon.
+    contextDir: openshift/notebook-image
+
+  strategy:
+    type: Docker
+    dockerStrategy:
+      # Path to the Dockerfile relative to contextDir.
+      # Defaults to "Dockerfile" — explicit here for clarity.
+      dockerfilePath: Dockerfile
+      # Pull secret for nvcr.io (base image in FROM instruction).
+      # Create this from openshift/secrets/registry-credentials.yaml.
+      pullSecret:
+        name: registry-pull-secret
+
+  output:
+    # Push the built image to the integrated registry, tagged in the
+    # nemo-tfm-workbench ImageStream as :latest.
+    # No pushSecret needed — the builder SA has internal registry rights.
+    to:
+      kind: ImageStreamTag
+      name: nemo-tfm-workbench:latest
+
+  triggers:
+    # Rebuild automatically whenever this BuildConfig definition changes.
+    - type: ConfigChange
+    # Rebuild automatically when the output ImageStreamTag is updated
+    # (e.g. a manual rebuild produces a new digest).
+    - type: ImageChange
+      imageChange: {}

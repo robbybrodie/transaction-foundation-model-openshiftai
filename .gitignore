@@ -7,3 +7,50 @@ tmp_nb_rerun_results/
 tmp_nb_test_results/
 src/__pycache__/
 src/tokenizer/__pycache__/
+
+# --- Secrets & credentials ---
+.env
+.env.local
+.env.*
+
+# Ignore a top-level standalone secrets/ directory, but NOT subdirectories
+# like openshift/secrets/ (which holds tracked .template.* files).
+/secrets/
+
+# Ignore populated (non-template) credential files anywhere in the tree
+**/secrets/*.env
+**/secrets/*.yaml
+**/secrets/*.json
+**/credentials.yaml
+**/secrets.yaml
+
+# Re-allow template skeletons and docs inside secrets directories
+!**/secrets/*.template.env
+!**/secrets/*.template.yaml
+!**/secrets/*.template.json
+!**/secrets/README.md
+
+# Other sensitive paths
+.kube/
+kubeconfig
+*.kubeconfig
+openshift-login.sh
+
+# Wildcard secret patterns (env/yaml/json only — avoids catching source files)
+*secret*.env
+*secret*.yaml
+*secret*.json
+*credential*.env
+*credential*.yaml
+*credential*.json
+*token*.env
+*token*.yaml
+*token*.json
+*apikey*.env
+*apikey*.yaml
+*apikey*.json
+
+# Re-allow template versions of the above wildcards
+!*.template.env
+!*.template.yaml
+!*.template.json

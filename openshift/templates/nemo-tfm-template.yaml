@@ -1,0 +1,276 @@
+# OpenShift Template — NeMo Transaction Foundation Model
+# -------------------------------------------------------
+# Parameterised deployment of the full NeMo TFM stack:
+#   - BuildConfig (workbench image build)
+#   - ImageStream (RHOAI dashboard registration)
+#   - ServiceAccount + SCC RoleBinding (training workloads)
+#   - DataSciencePipelinesApplication (KFP pipeline server)
+#   - Notebook workbench CR
+#
+# apiVersion template.openshift.io/v1 — verified against OCP documentation:
+# https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/builds_using_buildconfig/understanding-buildconfigs
+#
+# Usage:
+#   # Process the template with default values and apply:
+#   oc process -f openshift/templates/nemo-tfm-template.yaml \
+#     -p NAMESPACE=my-project \
+#     -p GIT_REPO_URL=https://github.com/my-org/my-repo.git \
+#     -p OPENSHIFT_USERNAME=jsmith \
+#     -p DASHBOARD_URL=https://rhods-dashboard-redhat-ods-applications.apps.my-cluster.example.com \
+#   | oc apply -f -
+#
+#   # Review what will be applied before committing:
+#   oc process -f openshift/templates/nemo-tfm-template.yaml \
+#     -p NAMESPACE=my-project \
+#     -p GIT_REPO_URL=https://... \
+#   | oc apply -f - --dry-run=client
+#
+# Note: Secrets are NOT included in this template — they contain sensitive
+# values and must be applied separately from openshift/secrets/ BEFORE
+# processing this template.
+#
+# Prerequisite secrets (apply first):
+#   oc apply -f openshift/secrets/registry-credentials.yaml -n <NAMESPACE>
+#   oc apply -f openshift/secrets/workbench-secret.yaml -n <NAMESPACE>
+
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: nemo-tfm
+  annotations:
+    openshift.io/display-name: "NeMo Transaction Foundation Model"
+    openshift.io/documentation-url: "https://github.com/NVIDIA/nemo"
+    description: >
+      End-to-end deployment of the NeMo decoder foundation model on Red Hat
+      OpenShift AI 3.3. Includes workbench image build (BuildConfig),
+      ImageStream registration, RBAC, pipeline server, and workbench CR.
+
+# ---------------------------------------------------------------------------
+# Parameters
+# ---------------------------------------------------------------------------
+parameters:
+  - name: NAMESPACE
+    description: "OpenShift project (namespace) to deploy into"
+    required: true
+
+  - name: GIT_REPO_URL
+    description: "Git repository URL for the source code (used by BuildConfig)"
+    required: true
+
+  - name: GIT_REF
+    description: "Git branch, tag, or commit SHA to build from"
+    value: main
+    required: true
+
+  - name: OPENSHIFT_USERNAME
+    description: "OpenShift username of the workbench owner (shown in RHOAI dashboard)"
+    required: true
+
+  - name: DASHBOARD_URL
+    description: "RHOAI dashboard URL — used for workbench logout redirect"
+    required: true
+
+  - name: S3_ENDPOINT_HOST
+    description: "S3-compatible storage endpoint host for the pipeline server (e.g. s3.amazonaws.com)"
+    required: true
+
+  - name: PIPELINE_BUCKET
+    description: "S3 bucket name for KFP pipeline artifacts"
+    required: true
+
+  - name: TRAINING_REPLICAS
+    description: "Number of Worker replicas for distributed training (0 = single-node)"
+    value: "0"
+
+# ---------------------------------------------------------------------------
+# Objects
+# ---------------------------------------------------------------------------
+objects:
+
+  # --- ImageStream: registers the workbench image with the RHOAI dashboard --
+  - apiVersion: image.openshift.io/v1
+    kind: ImageStream
+    metadata:
+      name: nemo-tfm-workbench
+      namespace: ${NAMESPACE}
+      labels:
+        opendatahub.io/notebook-image: "true"
+        app: nemo-tfm
+      annotations:
+        opendatahub.io/notebook-image-name: "NeMo Transaction Foundation Model"
+        opendatahub.io/notebook-image-desc: "NVIDIA NeMo 25.09 with transaction foundation model dependencies"
+        opendatahub.io/notebook-image-order: "1"
+    spec:
+      lookupPolicy:
+        local: true
+
+  # --- BuildConfig: builds the workbench image from the repo Dockerfile -----
+  - apiVersion: build.openshift.io/v1
+    kind: BuildConfig
+    metadata:
+      name: nemo-tfm-workbench
+      namespace: ${NAMESPACE}
+      labels:
+        app: nemo-tfm
+    spec:
+      runPolicy: Serial
+      source:
+        type: Git
+        git:
+          uri: ${GIT_REPO_URL}
+          ref: ${GIT_REF}
+        contextDir: openshift/notebook-image
+      strategy:
+        type: Docker
+        dockerStrategy:
+          dockerfilePath: Dockerfile
+          pullSecret:
+            name: registry-pull-secret
+      output:
+        to:
+          kind: ImageStreamTag
+          name: nemo-tfm-workbench:latest
+      triggers:
+        - type: ConfigChange
+        - type: ImageChange
+          imageChange: {}
+
+  # --- ServiceAccount for training pods ------------------------------------
+  - apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: nemo-tfm-training
+      namespace: ${NAMESPACE}
+      labels:
+        app: nemo-tfm
+
+  # --- ClusterRole granting anyuid SCC use ---------------------------------
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      name: nemo-tfm-anyuid-scc
+      labels:
+        app: nemo-tfm
+    rules:
+      - apiGroups:
+          - security.openshift.io
+        resources:
+          - securitycontextconstraints
+        resourceNames:
+          - anyuid
+        verbs:
+          - use
+
+  # --- RoleBinding: grant training SA the anyuid SCC in this namespace -----
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: nemo-tfm-training-anyuid
+      namespace: ${NAMESPACE}
+      labels:
+        app: nemo-tfm
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: nemo-tfm-anyuid-scc
+    subjects:
+      - kind: ServiceAccount
+        name: nemo-tfm-training
+        namespace: ${NAMESPACE}
+
+  # --- PVC: workbench home directory ----------------------------------------
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: nemo-tfm-workbench-data
+      namespace: ${NAMESPACE}
+      labels:
+        app: nemo-tfm
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 100Gi
+
+  # --- DataSciencePipelinesApplication: KFP 2.x pipeline server ------------
+  - apiVersion: datasciencepipelinesapplications.opendatahub.io/v1alpha1
+    kind: DataSciencePipelinesApplication
+    metadata:
+      name: pipelines-definition
+      namespace: ${NAMESPACE}
+      labels:
+        app: nemo-tfm
+    spec:
+      apiServer:
+        deploy: true
+        enableSamplePipeline: false
+      persistenceAgent:
+        deploy: true
+      scheduledWorkflow:
+        deploy: true
+      mlpipelineUI:
+        deploy: true
+      objectStorage:
+        externalStorage:
+          host: ${S3_ENDPOINT_HOST}
+          port: ""
+          bucket: ${PIPELINE_BUCKET}
+          scheme: https
+          secure: true
+          s3CredentialsSecret:
+            secretName: workbench-runtime-secret
+            accessKey: MODEL_REGISTRY_ACCESS_KEY
+            secretKey: MODEL_REGISTRY_SECRET_KEY
+      database:
+        mariaDB:
+          deploy: true
+          pipelineDBName: mlpipeline
+          pvcSize: 10Gi
+          username: mlpipeline
+          passwordSecret:
+            name: ds-pipeline-db-${NAMESPACE}
+            key: password
+
+  # --- Notebook workbench CR -----------------------------------------------
+  - apiVersion: kubeflow.org/v1
+    kind: Notebook
+    metadata:
+      name: nemo-tfm-workbench
+      namespace: ${NAMESPACE}
+      labels:
+        app: nemo-tfm-workbench
+      annotations:
+        notebooks.opendatahub.io/inject-oauth: 'true'
+        opendatahub.io/image-display-name: "NeMo Transaction Foundation Model"
+        openshift.io/display-name: "NeMo Transaction Foundation Model Workbench"
+        openshift.io/description: "Workbench for training and evaluating the transaction foundation model"
+        notebooks.opendatahub.io/last-image-selection: "nemo-tfm-workbench:latest"
+        opendatahub.io/username: ${OPENSHIFT_USERNAME}
+        notebooks.opendatahub.io/oauth-logout-url: "${DASHBOARD_URL}/projects/${NAMESPACE}?notebookLogout=nemo-tfm-workbench"
+    spec:
+      template:
+        spec:
+          containers:
+            - name: nemo-tfm-workbench
+              image: image-registry.openshift-image-registry.svc:5000/${NAMESPACE}/nemo-tfm-workbench:latest
+              imagePullPolicy: Always
+              envFrom:
+                - secretRef:
+                    name: workbench-runtime-secret
+              resources:
+                requests:
+                  cpu: "4"
+                  memory: 32Gi
+                  nvidia.com/gpu: "1"
+                limits:
+                  cpu: "8"
+                  memory: 64Gi
+                  nvidia.com/gpu: "1"
+              volumeMounts:
+                - name: workbench-data
+                  mountPath: /opt/app-root/src
+          volumes:
+            - name: workbench-data
+              persistentVolumeClaim:
+                claimName: nemo-tfm-workbench-data
