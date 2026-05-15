@@ -21,7 +21,8 @@ from kfp import kubernetes
 # ---------------------------------------------------------------------------
 IMAGE = "image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest"
 PVC_NAME = "nemo-tfm-workbench-data"
-WORK_DIR = "/opt/app-root/src"
+# Repo is cloned to this path on the workbench PVC
+WORK_DIR = "/opt/app-root/src/nemo-tfm"
 
 PIPELINE_NAME = "nemo-transaction-foundation-model"
 PIPELINE_DESCRIPTION = (
