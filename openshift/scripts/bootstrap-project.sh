@@ -91,6 +91,11 @@ else
         --description="Westpac NeMo decoder foundation model — training, evaluation, and serving"
 fi
 
+# Label the namespace so it appears as a managed project in the RHOAI dashboard.
+# Without this label the Pipelines, Workbenches, and Models tabs are not shown.
+info "Labelling namespace for RHOAI dashboard visibility..."
+oc label namespace "$NAMESPACE" opendatahub.io/dashboard=true --overwrite
+
 # ---------------------------------------------------------------------------
 # Step 2: Pull secret for nvcr.io
 # ---------------------------------------------------------------------------
