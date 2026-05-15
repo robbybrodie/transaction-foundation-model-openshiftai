@@ -41,7 +41,7 @@ spec:
       # Replace with your fork/mirror URL.
       # For private repos, add a sourceSecret referencing an SSH key or token.
       uri: https://github.com/robbybrodie/transaction-foundation-model-openshiftai
-      ref: main
+      ref: openshiftai-integration
     # contextDir is relative to the repo root.
     # The builder uses this as the Docker build context; only files under
     # this directory are sent to the build daemon.
