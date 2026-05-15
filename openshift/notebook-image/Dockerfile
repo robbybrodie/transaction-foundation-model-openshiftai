@@ -26,4 +26,4 @@ ENV HOME=/opt/app-root/src
 # exits immediately when run without a TTY in a pod. Override that here.
 # NB_PREFIX is injected by the Notebook Controller (e.g. /notebook/nemo-tfm/nemo-tfm-workbench).
 # Using sh -c so the variable is expanded at runtime.
-CMD ["sh", "-c", "exec jupyter lab --port=8888 --ip=0.0.0.0 --no-browser --allow-root --ServerApp.allow_remote_access=True --ServerApp.token= --ServerApp.password= --ServerApp.base_url=${NB_PREFIX:-/}"]
+CMD ["sh", "-c", "exec jupyter lab --port=8888 --ip=0.0.0.0 --no-browser --allow-root --ServerApp.allow_remote_access=True --ServerApp.token= --ServerApp.password= --ServerApp.base_url=${NB_PREFIX:-/} --ServerApp.root_dir=/opt/app-root/src"]
