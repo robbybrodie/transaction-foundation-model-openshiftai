@@ -50,6 +50,9 @@ spec:
       host: s3.us-west-2.amazonaws.com
       port: ""                           # leave empty for default (443/80)
       bucket: nemo-tfm-pipelines-e17c4943
+      # region MUST be set explicitly — empty string defaults to "auto" at runtime,
+      # which causes S3 AuthorizationHeaderMalformed errors on artifact uploads.
+      region: us-west-2
       scheme: https
       secure: true
       # Secret containing AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY

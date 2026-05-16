@@ -4,6 +4,9 @@ Five sequential steps, each running one of the project's Jupyter notebooks
 via papermill.  All steps share the workbench PVC so data, checkpoints,
 and model artefacts are visible across the whole run.
 
+Each step's name in the RHOAI Dashboard matches the source notebook filename
+so data scientists can map steps to notebooks at a glance.
+
 The pipeline can be compiled to YAML by running this file directly:
 
     python pipeline/nemo_tfm_pipeline.py
@@ -32,57 +35,40 @@ PIPELINE_DESCRIPTION = (
 
 
 # ---------------------------------------------------------------------------
-# Shared component: execute any notebook via papermill
+# Shared papermill body — inlined in each @component because KFP requires
+# component functions to be fully self-contained.  notebook_name is the
+# only thing that differs between steps.
+# ---------------------------------------------------------------------------
+
+def _papermill_body(notebook_name: str, work_dir: str) -> str:
+    """Template — not called at runtime; see inline copies in each component."""
+    ...
+
+
+# ---------------------------------------------------------------------------
+# Step 1: dataset_baseline  →  01_dataset_baseline.ipynb
 # ---------------------------------------------------------------------------
 
 @component(base_image=IMAGE)
-def run_notebook(notebook_name: str, work_dir: str, prev: str = "") -> str:
-    """Run a Jupyter notebook via papermill and return the output path.
-
-    ``prev`` is intentionally unused — it exists only to wire a data-dependency
-    between steps so KFP executes them sequentially rather than in parallel.
-    Executed notebooks are saved to ``<work_dir>/pipeline-outputs/``.
-
-    Cells containing kernel-shutdown calls (``do_shutdown(True)`` or
-    ``IPython.Application.instance()``) are stripped before execution —
-    identical to the CI pipeline's ci_strip_kernel_shutdown.py logic.
-    These cells are meant for interactive workbench use and cause papermill
-    to receive a DeadKernelError mid-run when not stripped.
-    """
+def dataset_baseline(work_dir: str, prev: str = "") -> str:
+    """Load the TabFormer dataset and run the XGBoost baseline (notebook 01)."""
     import json
     import os
     import subprocess
     import sys
     import tempfile
 
-    # HOME=/tmp is set at the pod level (see _configure_task).  Ensure the
-    # subprocess env inherits it so pip --user and jupyter --user paths all
-    # resolve under /tmp rather than the image default /opt/app-root/src.
+    notebook_name = "01_dataset_baseline.ipynb"
     env = os.environ.copy()
     env["HOME"] = "/tmp"
 
-    # --- Register the python3 kernel under HOME=/tmp ---
-    # The NeMo image may have registered the python3 kernel spec at the
-    # image-build-time HOME (/opt/app-root/src).  Overriding HOME=/tmp means
-    # that path is no longer the user kernel dir, so papermill cannot find the
-    # kernel.  Register it explicitly into /tmp/.local/share/jupyter/kernels/
-    # to guarantee it is discoverable regardless of where the image built it.
     subprocess.run(
         [sys.executable, "-m", "ipykernel", "install",
          "--user", "--name", "python3", "--display-name", "Python 3"],
-        check=True,
-        env=env,
+        check=True, env=env,
     )
 
-    # --- Strip kernel-shutdown cells (identical logic to CI ci_strip_kernel_shutdown.py) ---
-    # Notebooks contain cells like:
-    #   IPython.Application.instance().kernel.do_shutdown(True)
-    # which shut down the Jupyter kernel for interactive use.  Papermill
-    # receives a DeadKernelError when it hits these.  Strip them from a temp
-    # copy before execution; the original notebook on the PVC is unchanged.
-    # CI marker check: strip code cells where BOTH markers appear together.
     SHUTDOWN_MARKERS = ("do_shutdown(True)", "IPython.Application.instance()")
-
     input_nb = os.path.join(work_dir, notebook_name)
     output_nb = os.path.join(work_dir, "pipeline-outputs", notebook_name)
     os.makedirs(os.path.dirname(output_nb), exist_ok=True)
@@ -90,12 +76,11 @@ def run_notebook(notebook_name: str, work_dir: str, prev: str = "") -> str:
     with open(input_nb, encoding="utf-8") as f:
         nb = json.load(f)
 
-    kept = []
-    removed = 0
+    kept, removed = [], 0
     for cell in nb["cells"]:
         if cell.get("cell_type") == "code":
             src = "".join(cell.get("source", []))
-            if all(marker in src for marker in SHUTDOWN_MARKERS):
+            if all(m in src for m in SHUTDOWN_MARKERS):
                 removed += 1
                 continue
         kept.append(cell)
@@ -111,16 +96,241 @@ def run_notebook(notebook_name: str, work_dir: str, prev: str = "") -> str:
         stripped_nb = tmp.name
 
     subprocess.run(
-        [
-            "papermill",
-            stripped_nb,
-            output_nb,
-            "--kernel", "python3",
-            "--no-progress-bar",
-        ],
-        check=True,
-        cwd=work_dir,
-        env=env,
+        ["papermill", stripped_nb, output_nb,
+         "--kernel", "python3", "--no-progress-bar"],
+        check=True, cwd=work_dir, env=env,
+    )
+    return output_nb
+
+
+# ---------------------------------------------------------------------------
+# Step 2: seq_preproc_tokenization  →  02_seq_preproc_tokenization.ipynb
+# ---------------------------------------------------------------------------
+
+@component(base_image=IMAGE)
+def seq_preproc_tokenization(work_dir: str, prev: str = "") -> str:
+    """GPU-accelerated sequence preprocessing and tokenisation (notebook 02)."""
+    import json
+    import os
+    import subprocess
+    import sys
+    import tempfile
+
+    notebook_name = "02_seq_preproc_tokenization.ipynb"
+    env = os.environ.copy()
+    env["HOME"] = "/tmp"
+
+    subprocess.run(
+        [sys.executable, "-m", "ipykernel", "install",
+         "--user", "--name", "python3", "--display-name", "Python 3"],
+        check=True, env=env,
+    )
+
+    SHUTDOWN_MARKERS = ("do_shutdown(True)", "IPython.Application.instance()")
+    input_nb = os.path.join(work_dir, notebook_name)
+    output_nb = os.path.join(work_dir, "pipeline-outputs", notebook_name)
+    os.makedirs(os.path.dirname(output_nb), exist_ok=True)
+
+    with open(input_nb, encoding="utf-8") as f:
+        nb = json.load(f)
+
+    kept, removed = [], 0
+    for cell in nb["cells"]:
+        if cell.get("cell_type") == "code":
+            src = "".join(cell.get("source", []))
+            if all(m in src for m in SHUTDOWN_MARKERS):
+                removed += 1
+                continue
+        kept.append(cell)
+    nb["cells"] = kept
+    if removed:
+        print(f"Stripped {removed} kernel-shutdown cell(s) from {notebook_name}")
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".ipynb", dir="/tmp", delete=False, encoding="utf-8"
+    ) as tmp:
+        json.dump(nb, tmp, ensure_ascii=False)
+        tmp.write("\n")
+        stripped_nb = tmp.name
+
+    subprocess.run(
+        ["papermill", stripped_nb, output_nb,
+         "--kernel", "python3", "--no-progress-bar"],
+        check=True, cwd=work_dir, env=env,
+    )
+    return output_nb
+
+
+# ---------------------------------------------------------------------------
+# Step 3: foundation_model_training  →  03_foundation_model_training.ipynb
+# ---------------------------------------------------------------------------
+
+@component(base_image=IMAGE)
+def foundation_model_training(work_dir: str, prev: str = "") -> str:
+    """Pre-train the NeMo decoder foundation model (notebook 03)."""
+    import json
+    import os
+    import subprocess
+    import sys
+    import tempfile
+
+    notebook_name = "03_foundation_model_training.ipynb"
+    env = os.environ.copy()
+    env["HOME"] = "/tmp"
+
+    subprocess.run(
+        [sys.executable, "-m", "ipykernel", "install",
+         "--user", "--name", "python3", "--display-name", "Python 3"],
+        check=True, env=env,
+    )
+
+    SHUTDOWN_MARKERS = ("do_shutdown(True)", "IPython.Application.instance()")
+    input_nb = os.path.join(work_dir, notebook_name)
+    output_nb = os.path.join(work_dir, "pipeline-outputs", notebook_name)
+    os.makedirs(os.path.dirname(output_nb), exist_ok=True)
+
+    with open(input_nb, encoding="utf-8") as f:
+        nb = json.load(f)
+
+    kept, removed = [], 0
+    for cell in nb["cells"]:
+        if cell.get("cell_type") == "code":
+            src = "".join(cell.get("source", []))
+            if all(m in src for m in SHUTDOWN_MARKERS):
+                removed += 1
+                continue
+        kept.append(cell)
+    nb["cells"] = kept
+    if removed:
+        print(f"Stripped {removed} kernel-shutdown cell(s) from {notebook_name}")
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".ipynb", dir="/tmp", delete=False, encoding="utf-8"
+    ) as tmp:
+        json.dump(nb, tmp, ensure_ascii=False)
+        tmp.write("\n")
+        stripped_nb = tmp.name
+
+    subprocess.run(
+        ["papermill", stripped_nb, output_nb,
+         "--kernel", "python3", "--no-progress-bar"],
+        check=True, cwd=work_dir, env=env,
+    )
+    return output_nb
+
+
+# ---------------------------------------------------------------------------
+# Step 4: inference_embedding_extraction  →  04_inference_embedding_extraction.ipynb
+# ---------------------------------------------------------------------------
+
+@component(base_image=IMAGE)
+def inference_embedding_extraction(work_dir: str, prev: str = "") -> str:
+    """Extract 512-d embeddings from the trained decoder model (notebook 04)."""
+    import json
+    import os
+    import subprocess
+    import sys
+    import tempfile
+
+    notebook_name = "04_inference_embedding_extraction.ipynb"
+    env = os.environ.copy()
+    env["HOME"] = "/tmp"
+
+    subprocess.run(
+        [sys.executable, "-m", "ipykernel", "install",
+         "--user", "--name", "python3", "--display-name", "Python 3"],
+        check=True, env=env,
+    )
+
+    SHUTDOWN_MARKERS = ("do_shutdown(True)", "IPython.Application.instance()")
+    input_nb = os.path.join(work_dir, notebook_name)
+    output_nb = os.path.join(work_dir, "pipeline-outputs", notebook_name)
+    os.makedirs(os.path.dirname(output_nb), exist_ok=True)
+
+    with open(input_nb, encoding="utf-8") as f:
+        nb = json.load(f)
+
+    kept, removed = [], 0
+    for cell in nb["cells"]:
+        if cell.get("cell_type") == "code":
+            src = "".join(cell.get("source", []))
+            if all(m in src for m in SHUTDOWN_MARKERS):
+                removed += 1
+                continue
+        kept.append(cell)
+    nb["cells"] = kept
+    if removed:
+        print(f"Stripped {removed} kernel-shutdown cell(s) from {notebook_name}")
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".ipynb", dir="/tmp", delete=False, encoding="utf-8"
+    ) as tmp:
+        json.dump(nb, tmp, ensure_ascii=False)
+        tmp.write("\n")
+        stripped_nb = tmp.name
+
+    subprocess.run(
+        ["papermill", stripped_nb, output_nb,
+         "--kernel", "python3", "--no-progress-bar"],
+        check=True, cwd=work_dir, env=env,
+    )
+    return output_nb
+
+
+# ---------------------------------------------------------------------------
+# Step 5: xgboost_fraud_detection  →  05_xgboost_fraud_detection.ipynb
+# ---------------------------------------------------------------------------
+
+@component(base_image=IMAGE)
+def xgboost_fraud_detection(work_dir: str, prev: str = "") -> str:
+    """Compare XGBoost with raw features vs. NeMo embeddings (notebook 05)."""
+    import json
+    import os
+    import subprocess
+    import sys
+    import tempfile
+
+    notebook_name = "05_xgboost_fraud_detection.ipynb"
+    env = os.environ.copy()
+    env["HOME"] = "/tmp"
+
+    subprocess.run(
+        [sys.executable, "-m", "ipykernel", "install",
+         "--user", "--name", "python3", "--display-name", "Python 3"],
+        check=True, env=env,
+    )
+
+    SHUTDOWN_MARKERS = ("do_shutdown(True)", "IPython.Application.instance()")
+    input_nb = os.path.join(work_dir, notebook_name)
+    output_nb = os.path.join(work_dir, "pipeline-outputs", notebook_name)
+    os.makedirs(os.path.dirname(output_nb), exist_ok=True)
+
+    with open(input_nb, encoding="utf-8") as f:
+        nb = json.load(f)
+
+    kept, removed = [], 0
+    for cell in nb["cells"]:
+        if cell.get("cell_type") == "code":
+            src = "".join(cell.get("source", []))
+            if all(m in src for m in SHUTDOWN_MARKERS):
+                removed += 1
+                continue
+        kept.append(cell)
+    nb["cells"] = kept
+    if removed:
+        print(f"Stripped {removed} kernel-shutdown cell(s) from {notebook_name}")
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".ipynb", dir="/tmp", delete=False, encoding="utf-8"
+    ) as tmp:
+        json.dump(nb, tmp, ensure_ascii=False)
+        tmp.write("\n")
+        stripped_nb = tmp.name
+
+    subprocess.run(
+        ["papermill", stripped_nb, output_nb,
+         "--kernel", "python3", "--no-progress-bar"],
+        check=True, cwd=work_dir, env=env,
     )
     return output_nb
 
@@ -133,13 +343,7 @@ def _configure_task(task):
     # Mount the PVC at /opt/app-root/src — the same mount point used by the
     # workbench pod.  The repo is cloned to nemo-tfm/ within the PVC, so
     # notebooks resolve correctly at WORK_DIR = /opt/app-root/src/nemo-tfm.
-    # (Mounting at WORK_DIR instead would put the PVC root one level too high,
-    # making notebooks unreachable at the path papermill expects.)
     kubernetes.mount_pvc(task, pvc_name=PVC_NAME, mount_path="/opt/app-root/src")
-    # The KFP launcher bootstraps itself by running 'pip install kfp' before
-    # executing the component code.  Pipeline step pods run with a restricted
-    # SCC (non-root, read-only system dirs) so pip defaults to --user install
-    # at ~/.local, which resolves to /opt/app-root/src/.local — not writable.
     # Setting HOME=/tmp redirects pip's user-scheme to /tmp/.local, which is
     # always writable, fixing both the launcher bootstrap and any %pip install
     # cells inside the notebooks.
@@ -156,54 +360,30 @@ def nemo_tfm_pipeline(work_dir: str = WORK_DIR):
     """Five-step end-to-end pipeline for the NeMo transaction foundation model."""
 
     # Step 1 — load the TabFormer dataset and run the XGBoost baseline
-    s1 = run_notebook(
-        notebook_name="01_dataset_baseline.ipynb",
-        work_dir=work_dir,
-    )
-    s1.set_display_name("1 - Dataset & XGBoost Baseline")
+    s1 = dataset_baseline(work_dir=work_dir)
     s1.set_cpu_request("2").set_memory_request("8G")
     _configure_task(s1)
 
     # Step 2 — GPU-accelerated tokenisation pipeline (cuDF / cuML)
-    s2 = run_notebook(
-        notebook_name="02_seq_preproc_tokenization.ipynb",
-        work_dir=work_dir,
-        prev=s1.output,
-    )
-    s2.set_display_name("2 - Sequence Tokenisation")
+    s2 = seq_preproc_tokenization(work_dir=work_dir, prev=s1.output)
     s2.set_cpu_request("4").set_memory_request("32G")
     s2.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
     _configure_task(s2)
 
     # Step 3 — pre-train the NeMo decoder foundation model
-    s3 = run_notebook(
-        notebook_name="03_foundation_model_training.ipynb",
-        work_dir=work_dir,
-        prev=s2.output,
-    )
-    s3.set_display_name("3 - Foundation Model Pre-training")
+    s3 = foundation_model_training(work_dir=work_dir, prev=s2.output)
     s3.set_cpu_request("8").set_memory_request("64G")
     s3.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
     _configure_task(s3)
 
     # Step 4 — extract 512-d embeddings from the trained model
-    s4 = run_notebook(
-        notebook_name="04_inference_embedding_extraction.ipynb",
-        work_dir=work_dir,
-        prev=s3.output,
-    )
-    s4.set_display_name("4 - Embedding Extraction")
+    s4 = inference_embedding_extraction(work_dir=work_dir, prev=s3.output)
     s4.set_cpu_request("4").set_memory_request("32G")
     s4.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
     _configure_task(s4)
 
     # Step 5 — compare XGBoost with raw features vs. NeMo embeddings
-    s5 = run_notebook(
-        notebook_name="05_xgboost_fraud_detection.ipynb",
-        work_dir=work_dir,
-        prev=s4.output,
-    )
-    s5.set_display_name("5 - XGBoost Fraud Detection")
+    s5 = xgboost_fraud_detection(work_dir=work_dir, prev=s4.output)
     s5.set_cpu_request("4").set_memory_request("16G")
     _configure_task(s5)
 
