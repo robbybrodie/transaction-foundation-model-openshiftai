@@ -45,6 +45,22 @@ spec:
     server: https://kubernetes.default.svc
     namespace: nemo-tfm
 
+  # Suppress perpetual drift caused by OpenShift platform controllers
+  # adding fields ArgoCD doesn't own:
+  #   - ServiceAccount: OpenShift adds default-dockercfg-* to imagePullSecrets/secrets
+  #   - BuildConfig:    OpenShift build controller sets lastTriggeredImageID in triggers
+  # With ServerSideApply=true ArgoCD still writes (owns) its desired fields;
+  # ignoreDifferences only prevents it from flagging the extra platform fields as drift.
+  ignoreDifferences:
+    - kind: ServiceAccount
+      jsonPointers:
+        - /imagePullSecrets
+        - /secrets
+    - kind: BuildConfig
+      group: build.openshift.io
+      jsonPointers:
+        - /spec/triggers
+
   syncPolicy:
     automated:
       prune: true

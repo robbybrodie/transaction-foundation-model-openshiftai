@@ -1,0 +1,30 @@
+# ArgoCD namespace-admin RoleBinding
+# Wave 0: applied in the same wave as other RBAC resources.
+#
+# The default OpenShift GitOps application controller ClusterRole grants
+# read-only access to most resources and full access only to specific
+# types (Namespace, PVC, RBAC). To manage ServiceAccounts (imagePullSecrets
+# patches) and SealedSecrets in the nemo-tfm namespace, the controller SA
+# needs at least namespace-admin access here.
+#
+# BOOTSTRAPPING NOTE: This RoleBinding must exist before ArgoCD can sync
+# the other wave-0 resources. On a fresh cluster, apply it manually once:
+#   oc adm policy add-role-to-user admin \
+#     system:serviceaccount:openshift-gitops:openshift-gitops-argocd-application-controller \
+#     -n nemo-tfm
+# ArgoCD will adopt and maintain this RoleBinding on all subsequent syncs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-admin-nemo-tfm
+  namespace: nemo-tfm
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - kind: ServiceAccount
+    name: openshift-gitops-argocd-application-controller
+    namespace: openshift-gitops

@@ -1,0 +1,26 @@
+# Model Output PVC
+# Wave 5: pre-creates the volume the InferenceService (wave 6) mounts as
+#   storageUri: pvc://nemo-tfm-model-output/decoder-foundation-model
+#
+# The KFP training pipeline writes the checkpoint here; the PVC must exist
+# before the InferenceService is applied or the predictor pod will stay Pending
+# with "persistentvolumeclaim not found".
+#
+# The checkpoint itself is small (~29M params) but allow 50Gi for optimizer
+# states, intermediate checkpoints, and vLLM's working space.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nemo-tfm-model-output
+  namespace: nemo-tfm
+  labels:
+    app: nemo-tfm
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: gp3-csi
