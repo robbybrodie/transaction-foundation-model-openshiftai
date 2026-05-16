@@ -73,11 +73,19 @@ def run_notebook(notebook_name: str, work_dir: str, prev: str = "") -> str:
 
 
 # ---------------------------------------------------------------------------
-# Helper: attach the shared PVC to a pipeline task
+# Helper: attach the shared PVC and set required pod environment variables
 # ---------------------------------------------------------------------------
 
-def _with_pvc(task):
+def _configure_task(task):
     kubernetes.mount_pvc(task, pvc_name=PVC_NAME, mount_path=WORK_DIR)
+    # The KFP launcher bootstraps itself by running 'pip install kfp' before
+    # executing the component code.  Pipeline step pods run with a restricted
+    # SCC (non-root, read-only system dirs) so pip defaults to --user install
+    # at ~/.local, which resolves to /opt/app-root/src/.local — not writable.
+    # Setting HOME=/tmp redirects pip's user-scheme to /tmp/.local, which is
+    # always writable, fixing both the launcher bootstrap and any %pip install
+    # cells inside the notebooks.
+    task.set_env_variable("HOME", "/tmp")
     return task
 
 
@@ -96,7 +104,7 @@ def nemo_tfm_pipeline(work_dir: str = WORK_DIR):
     )
     s1.set_display_name("1 - Dataset & XGBoost Baseline")
     s1.set_cpu_request("2").set_memory_request("8G")
-    _with_pvc(s1)
+    _configure_task(s1)
 
     # Step 2 — GPU-accelerated tokenisation pipeline (cuDF / cuML)
     s2 = run_notebook(
@@ -107,7 +115,7 @@ def nemo_tfm_pipeline(work_dir: str = WORK_DIR):
     s2.set_display_name("2 - Sequence Tokenisation")
     s2.set_cpu_request("4").set_memory_request("32G")
     s2.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
-    _with_pvc(s2)
+    _configure_task(s2)
 
     # Step 3 — pre-train the NeMo decoder foundation model
     s3 = run_notebook(
@@ -118,7 +126,7 @@ def nemo_tfm_pipeline(work_dir: str = WORK_DIR):
     s3.set_display_name("3 - Foundation Model Pre-training")
     s3.set_cpu_request("8").set_memory_request("64G")
     s3.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
-    _with_pvc(s3)
+    _configure_task(s3)
 
     # Step 4 — extract 512-d embeddings from the trained model
     s4 = run_notebook(
@@ -129,7 +137,7 @@ def nemo_tfm_pipeline(work_dir: str = WORK_DIR):
     s4.set_display_name("4 - Embedding Extraction")
     s4.set_cpu_request("4").set_memory_request("32G")
     s4.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
-    _with_pvc(s4)
+    _configure_task(s4)
 
     # Step 5 — compare XGBoost with raw features vs. NeMo embeddings
     s5 = run_notebook(
@@ -139,7 +147,7 @@ def nemo_tfm_pipeline(work_dir: str = WORK_DIR):
     )
     s5.set_display_name("5 - XGBoost Fraud Detection")
     s5.set_cpu_request("4").set_memory_request("16G")
-    _with_pvc(s5)
+    _configure_task(s5)
 
 
 # ---------------------------------------------------------------------------
