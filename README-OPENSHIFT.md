@@ -58,32 +58,99 @@ Git repo
 
 ## Prerequisites
 
-### Cluster-level (cluster-admin, one-time)
+> **You do not need the `aws_ocp` repository.**
+> That repo documents how this project's demo cluster was provisioned on AWS.
+> If you already have an OpenShift cluster with RHOAI and a GPU node, start
+> here. If you need to build a cluster from scratch on AWS, see
+> [aws_ocp](https://github.com/robbybrodie/aws_ocp) for reference.
 
-Full cluster setup — OpenShift install, operator subscriptions (NVIDIA GPU
-Operator, NFD, OSSM, Serverless, RHOAI), GPU `ClusterPolicy`, and
-`DataScienceCluster` configuration — is documented and scripted in the
-companion **[aws_ocp](https://github.com/robbybrodie/aws_ocp)** repository. Complete that setup first.
+---
 
-The cluster must have the following in place before continuing here:
+### What you need
 
-- RHOAI `DataScienceCluster` with `workbenches`, `kserve`,
-  `datasciencepipelines`, and `trainingoperator` all `Managed`
-- NVIDIA GPU Operator with NFD running and `ClusterPolicy` applied
-- At least one GPU node with `nvidia.com/gpu` allocatable
+#### OpenShift cluster
 
-Verify before proceeding:
+| Requirement | Minimum | Tested on |
+|---|---|---|
+| OpenShift Container Platform | 4.19 | 4.21.15 |
+| Infrastructure | Any (AWS, GCP, Azure, bare-metal, on-prem) | AWS `g6.8xlarge` (NVIDIA L4) |
+| `oc` CLI | Matching cluster version | — |
+
+The cluster can run anywhere OpenShift runs. Cloud, on-prem, or bare-metal
+are all fine as long as the GPU and operator requirements below are met.
+
+#### GPU node
+
+| Requirement | Detail |
+|---|---|
+| GPU | NVIDIA A100 (80 GB) or H100 recommended for full training; L4 is sufficient for the 30-step demo |
+| CUDA | 12.x (provided by the NeMo container — no host CUDA install needed) |
+| Root volume | **300 GB minimum** — the NeMo base image is ~25 GB; the default 120 GB disk causes eviction during the BuildConfig image build |
+| Count | 1 GPU node minimum; more for multi-node training |
+
+#### RHOAI and operators (cluster-admin, one-time)
+
+| Component | Version | Notes |
+|---|---|---|
+| Red Hat OpenShift AI | 3.x (`stable` channel) | Tested on operator 2.25.6 / RHOAI 3.3 |
+| NVIDIA GPU Operator | v24.9+ | Channel `v24.9` |
+| Node Feature Discovery (NFD) | Stable | Labels GPU nodes; GPU Operator depends on it |
+| OpenShift Service Mesh (OSSM) | 2.x | Required by KServe (model serving only — skip if not serving) |
+| OpenShift Serverless | 1.x | Required by KServe (model serving only — skip if not serving) |
+
+The `DataScienceCluster` CR must have these components set to `Managed`:
+
+```yaml
+# Required for this project:
+workbenches:          Managed   # JupyterLab workbench
+datasciencepipelines: Managed   # KFP 2.x pipeline server
+trainingoperator:     Managed   # PyTorchJob distributed training
+
+# Required only for model serving (Step 7):
+kserve:               Managed
+serving:              Managed
+```
+
+#### S3-compatible object storage
+
+The KFP pipeline server (`DataSciencePipelinesApplication`) stores pipeline
+run artifacts in S3. You need:
+
+- An S3-compatible bucket (AWS S3, MinIO, or OpenShift Data Foundation all work)
+- An access key / secret key with read-write access to that bucket
+- The bucket endpoint, region, and name — these go into `openshift/secrets/workbench-secret.yaml`
+
+The bucket does **not** need to be on AWS. MinIO running anywhere works.
+
+#### NGC API key
+
+Required to pull `nvcr.io/nvidia/nemo:25.09.01` from NVIDIA's container
+registry. Obtain one from [ngc.nvidia.com](https://ngc.nvidia.com) (free
+account). This goes into `openshift/secrets/registry-credentials.yaml`.
+
+---
+
+### Verify your cluster is ready
+
+Run these checks before applying any manifests:
+
 ```bash
-# All four CRDs must be present
+# RHOAI operator installed
+oc get csv -n redhat-ods-operator | grep rhods-operator
+
+# All required CRDs present
 oc get crd notebooks.kubeflow.org
 oc get crd pytorchjobs.kubeflow.org
-oc get crd inferenceservices.serving.kserve.io
-oc get crd | grep datasciencepipelinesapplications
+oc get crd datasciencepipelinesapplications.opendatahub.io
 
-# GPU must be allocatable
+# GPU operator running and GPU nodes labelled
+oc get nodes -l nvidia.com/gpu.present=true
 oc get node -l nvidia.com/gpu.present=true \
   -o jsonpath='{.items[*].status.allocatable.nvidia\.com/gpu}'
-# Expected: 1 (or more)
+# Expected: 1 (or more per node)
+
+# DataScienceCluster components ready
+oc get datasciencecluster -o jsonpath='{range .items[0].status.conditions[*]}{.type}{"\t"}{.status}{"\n"}{end}'
 ```
 
 ### Tools
