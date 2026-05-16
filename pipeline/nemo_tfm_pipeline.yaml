@@ -1,0 +1,558 @@
+# PIPELINE DEFINITION
+# Name: nemo-transaction-foundation-model
+# Description: End-to-end NeMo decoder foundation model: data prep -> tokenisation -> pre-training -> embedding extraction -> fraud detection
+# Inputs:
+#    work_dir: str [Default: '/opt/app-root/src/nemo-tfm']
+components:
+  comp-dataset-baseline:
+    executorLabel: exec-dataset-baseline
+    inputDefinitions:
+      parameters:
+        prev:
+          defaultValue: ''
+          isOptional: true
+          parameterType: STRING
+        work_dir:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-foundation-model-training:
+    executorLabel: exec-foundation-model-training
+    inputDefinitions:
+      parameters:
+        prev:
+          defaultValue: ''
+          isOptional: true
+          parameterType: STRING
+        work_dir:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-inference-embedding-extraction:
+    executorLabel: exec-inference-embedding-extraction
+    inputDefinitions:
+      parameters:
+        prev:
+          defaultValue: ''
+          isOptional: true
+          parameterType: STRING
+        work_dir:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-seq-preproc-tokenization:
+    executorLabel: exec-seq-preproc-tokenization
+    inputDefinitions:
+      parameters:
+        prev:
+          defaultValue: ''
+          isOptional: true
+          parameterType: STRING
+        work_dir:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-xgboost-fraud-detection:
+    executorLabel: exec-xgboost-fraud-detection
+    inputDefinitions:
+      parameters:
+        prev:
+          defaultValue: ''
+          isOptional: true
+          parameterType: STRING
+        work_dir:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+deploymentSpec:
+  executors:
+    exec-dataset-baseline:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - dataset_baseline
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.13.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef dataset_baseline(work_dir: str, prev: str = \"\") -> str:\n \
+          \   \"\"\"Load the TabFormer dataset and run the XGBoost baseline (notebook\
+          \ 01).\"\"\"\n    import json\n    import os\n    import subprocess\n  \
+          \  import sys\n    import tempfile\n\n    notebook_name = \"01_dataset_baseline.ipynb\"\
+          \n    env = os.environ.copy()\n    env[\"HOME\"] = \"/tmp\"\n\n    subprocess.run(\n\
+          \        [sys.executable, \"-m\", \"ipykernel\", \"install\",\n        \
+          \ \"--user\", \"--name\", \"python3\", \"--display-name\", \"Python 3\"\
+          ],\n        check=True, env=env,\n    )\n\n    SHUTDOWN_MARKERS = (\"do_shutdown(True)\"\
+          , \"IPython.Application.instance()\")\n    input_nb = os.path.join(work_dir,\
+          \ notebook_name)\n    output_nb = os.path.join(work_dir, \"pipeline-outputs\"\
+          , notebook_name)\n    os.makedirs(os.path.dirname(output_nb), exist_ok=True)\n\
+          \n    with open(input_nb, encoding=\"utf-8\") as f:\n        nb = json.load(f)\n\
+          \n    kept, removed = [], 0\n    for cell in nb[\"cells\"]:\n        if\
+          \ cell.get(\"cell_type\") == \"code\":\n            src = \"\".join(cell.get(\"\
+          source\", []))\n            if all(m in src for m in SHUTDOWN_MARKERS):\n\
+          \                removed += 1\n                continue\n        kept.append(cell)\n\
+          \    nb[\"cells\"] = kept\n    if removed:\n        print(f\"Stripped {removed}\
+          \ kernel-shutdown cell(s) from {notebook_name}\")\n\n    with tempfile.NamedTemporaryFile(\n\
+          \        mode=\"w\", suffix=\".ipynb\", dir=\"/tmp\", delete=False, encoding=\"\
+          utf-8\"\n    ) as tmp:\n        json.dump(nb, tmp, ensure_ascii=False)\n\
+          \        tmp.write(\"\\n\")\n        stripped_nb = tmp.name\n\n    subprocess.run(\n\
+          \        [\"papermill\", stripped_nb, output_nb,\n         \"--kernel\"\
+          , \"python3\", \"--no-progress-bar\"],\n        check=True, cwd=work_dir,\
+          \ env=env,\n    )\n    return output_nb\n\n"
+        env:
+        - name: HOME
+          value: /tmp
+        image: image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest
+        resources:
+          cpuRequest: 2.0
+          memoryRequest: 8.0
+          resourceCpuRequest: '2'
+          resourceMemoryRequest: 8G
+    exec-foundation-model-training:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - foundation_model_training
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.13.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef foundation_model_training(work_dir: str, prev: str = \"\") ->\
+          \ str:\n    \"\"\"Pre-train the NeMo decoder foundation model (notebook\
+          \ 03).\"\"\"\n    import json\n    import os\n    import subprocess\n  \
+          \  import sys\n    import tempfile\n\n    notebook_name = \"03_foundation_model_training.ipynb\"\
+          \n    env = os.environ.copy()\n    env[\"HOME\"] = \"/tmp\"\n\n    subprocess.run(\n\
+          \        [sys.executable, \"-m\", \"ipykernel\", \"install\",\n        \
+          \ \"--user\", \"--name\", \"python3\", \"--display-name\", \"Python 3\"\
+          ],\n        check=True, env=env,\n    )\n\n    SHUTDOWN_MARKERS = (\"do_shutdown(True)\"\
+          , \"IPython.Application.instance()\")\n    input_nb = os.path.join(work_dir,\
+          \ notebook_name)\n    output_nb = os.path.join(work_dir, \"pipeline-outputs\"\
+          , notebook_name)\n    os.makedirs(os.path.dirname(output_nb), exist_ok=True)\n\
+          \n    with open(input_nb, encoding=\"utf-8\") as f:\n        nb = json.load(f)\n\
+          \n    kept, removed = [], 0\n    for cell in nb[\"cells\"]:\n        if\
+          \ cell.get(\"cell_type\") == \"code\":\n            src = \"\".join(cell.get(\"\
+          source\", []))\n            if all(m in src for m in SHUTDOWN_MARKERS):\n\
+          \                removed += 1\n                continue\n        kept.append(cell)\n\
+          \    nb[\"cells\"] = kept\n    if removed:\n        print(f\"Stripped {removed}\
+          \ kernel-shutdown cell(s) from {notebook_name}\")\n\n    with tempfile.NamedTemporaryFile(\n\
+          \        mode=\"w\", suffix=\".ipynb\", dir=\"/tmp\", delete=False, encoding=\"\
+          utf-8\"\n    ) as tmp:\n        json.dump(nb, tmp, ensure_ascii=False)\n\
+          \        tmp.write(\"\\n\")\n        stripped_nb = tmp.name\n\n    subprocess.run(\n\
+          \        [\"papermill\", stripped_nb, output_nb,\n         \"--kernel\"\
+          , \"python3\", \"--no-progress-bar\"],\n        check=True, cwd=work_dir,\
+          \ env=env,\n    )\n    return output_nb\n\n"
+        env:
+        - name: HOME
+          value: /tmp
+        image: image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest
+        resources:
+          accelerator:
+            count: '1'
+            resourceCount: '1'
+            resourceType: nvidia.com/gpu
+            type: nvidia.com/gpu
+          cpuRequest: 8.0
+          memoryRequest: 64.0
+          resourceCpuRequest: '8'
+          resourceMemoryRequest: 64G
+    exec-inference-embedding-extraction:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - inference_embedding_extraction
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.13.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef inference_embedding_extraction(work_dir: str, prev: str = \"\"\
+          ) -> str:\n    \"\"\"Extract 512-d embeddings from the trained decoder model\
+          \ (notebook 04).\"\"\"\n    import glob\n    import json\n    import os\n\
+          \    import subprocess\n    import sys\n    import tempfile\n\n    notebook_name\
+          \ = \"04_inference_embedding_extraction.ipynb\"\n    env = os.environ.copy()\n\
+          \    env[\"HOME\"] = \"/tmp\"\n\n    # ---------------------------------------------------------------------------\n\
+          \    # Smudge Git LFS pointer files in models/decoder-foundation-model/\n\
+          \    # The repo clone on the PVC may only have LFS pointer files (133-byte\
+          \ ASCII)\n    # if `git lfs pull` was never run interactively.  This block\
+          \ detects any\n    # pointer files and downloads the real blobs from GitHub\
+          \ LFS automatically.\n    # ---------------------------------------------------------------------------\n\
+          \    LFS_REPO = (\n        \"https://github.com/robbybrodie/\"\n       \
+          \ \"transaction-foundation-model-openshiftai.git\"\n    )\n    models_dir\
+          \ = os.path.join(work_dir, \"models\", \"decoder-foundation-model\")\n \
+          \   for model_path in glob.glob(os.path.join(models_dir, \"*.safetensors\"\
+          )):\n        with open(model_path, \"rb\") as _f:\n            header =\
+          \ _f.read(50)\n        if not header.startswith(b\"version https://git-lfs\"\
+          ):\n            continue\n        # It's a pointer \u2014 parse OID and\
+          \ size\n        with open(model_path, encoding=\"utf-8\") as _f:\n     \
+          \       pointer_text = _f.read()\n        oid = next(\n            line.split(\"\
+          sha256:\")[1].strip()\n            for line in pointer_text.splitlines()\n\
+          \            if line.startswith(\"oid \")\n        )\n        size = int(next(\n\
+          \            line.split()[1]\n            for line in pointer_text.splitlines()\n\
+          \            if line.startswith(\"size \")\n        ))\n        print(\n\
+          \            f\"LFS pointer detected: {os.path.basename(model_path)} \"\n\
+          \            f\"({size:,} bytes). Fetching real blob...\"\n        )\n \
+          \       batch_body = json.dumps({\n            \"operation\": \"download\"\
+          ,\n            \"transfers\": [\"basic\"],\n            \"objects\": [{\"\
+          oid\": oid, \"size\": size}],\n        })\n        batch_result = subprocess.run(\n\
+          \            [\n                \"curl\", \"-s\", \"-X\", \"POST\",\n  \
+          \              \"-H\", \"Content-Type: application/vnd.git-lfs+json\",\n\
+          \                \"-H\", \"Accept: application/vnd.git-lfs+json\",\n   \
+          \             f\"{LFS_REPO}/info/lfs/objects/batch\",\n                \"\
+          -d\", batch_body,\n            ],\n            capture_output=True, text=True,\
+          \ check=True,\n        )\n        batch_resp = json.loads(batch_result.stdout)\n\
+          \        download_url = batch_resp[\"objects\"][0][\"actions\"][\"download\"\
+          ][\"href\"]\n        print(f\"Downloading {os.path.basename(model_path)}...\"\
+          )\n        subprocess.run(\n            [\"curl\", \"-L\", \"-o\", model_path,\
+          \ download_url],\n            check=True, env=env,\n        )\n        print(f\"\
+          Smudged: {os.path.basename(model_path)} = {os.path.getsize(model_path):,}\
+          \ bytes\")\n\n    subprocess.run(\n        [sys.executable, \"-m\", \"ipykernel\"\
+          , \"install\",\n         \"--user\", \"--name\", \"python3\", \"--display-name\"\
+          , \"Python 3\"],\n        check=True, env=env,\n    )\n\n    SHUTDOWN_MARKERS\
+          \ = (\"do_shutdown(True)\", \"IPython.Application.instance()\")\n    input_nb\
+          \ = os.path.join(work_dir, notebook_name)\n    output_nb = os.path.join(work_dir,\
+          \ \"pipeline-outputs\", notebook_name)\n    os.makedirs(os.path.dirname(output_nb),\
+          \ exist_ok=True)\n\n    with open(input_nb, encoding=\"utf-8\") as f:\n\
+          \        nb = json.load(f)\n\n    kept, removed = [], 0\n    for cell in\
+          \ nb[\"cells\"]:\n        if cell.get(\"cell_type\") == \"code\":\n    \
+          \        src = \"\".join(cell.get(\"source\", []))\n            if all(m\
+          \ in src for m in SHUTDOWN_MARKERS):\n                removed += 1\n   \
+          \             continue\n        kept.append(cell)\n    nb[\"cells\"] = kept\n\
+          \    if removed:\n        print(f\"Stripped {removed} kernel-shutdown cell(s)\
+          \ from {notebook_name}\")\n\n    with tempfile.NamedTemporaryFile(\n   \
+          \     mode=\"w\", suffix=\".ipynb\", dir=\"/tmp\", delete=False, encoding=\"\
+          utf-8\"\n    ) as tmp:\n        json.dump(nb, tmp, ensure_ascii=False)\n\
+          \        tmp.write(\"\\n\")\n        stripped_nb = tmp.name\n\n    subprocess.run(\n\
+          \        [\"papermill\", stripped_nb, output_nb,\n         \"--kernel\"\
+          , \"python3\", \"--no-progress-bar\"],\n        check=True, cwd=work_dir,\
+          \ env=env,\n    )\n    return output_nb\n\n"
+        env:
+        - name: HOME
+          value: /tmp
+        image: image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest
+        resources:
+          accelerator:
+            count: '1'
+            resourceCount: '1'
+            resourceType: nvidia.com/gpu
+            type: nvidia.com/gpu
+          cpuRequest: 4.0
+          memoryRequest: 32.0
+          resourceCpuRequest: '4'
+          resourceMemoryRequest: 32G
+    exec-seq-preproc-tokenization:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - seq_preproc_tokenization
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.13.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef seq_preproc_tokenization(work_dir: str, prev: str = \"\") ->\
+          \ str:\n    \"\"\"GPU-accelerated sequence preprocessing and tokenisation\
+          \ (notebook 02).\"\"\"\n    import json\n    import os\n    import subprocess\n\
+          \    import sys\n    import tempfile\n\n    notebook_name = \"02_seq_preproc_tokenization.ipynb\"\
+          \n    env = os.environ.copy()\n    env[\"HOME\"] = \"/tmp\"\n\n    subprocess.run(\n\
+          \        [sys.executable, \"-m\", \"ipykernel\", \"install\",\n        \
+          \ \"--user\", \"--name\", \"python3\", \"--display-name\", \"Python 3\"\
+          ],\n        check=True, env=env,\n    )\n\n    SHUTDOWN_MARKERS = (\"do_shutdown(True)\"\
+          , \"IPython.Application.instance()\")\n    input_nb = os.path.join(work_dir,\
+          \ notebook_name)\n    output_nb = os.path.join(work_dir, \"pipeline-outputs\"\
+          , notebook_name)\n    os.makedirs(os.path.dirname(output_nb), exist_ok=True)\n\
+          \n    with open(input_nb, encoding=\"utf-8\") as f:\n        nb = json.load(f)\n\
+          \n    kept, removed = [], 0\n    for cell in nb[\"cells\"]:\n        if\
+          \ cell.get(\"cell_type\") == \"code\":\n            src = \"\".join(cell.get(\"\
+          source\", []))\n            if all(m in src for m in SHUTDOWN_MARKERS):\n\
+          \                removed += 1\n                continue\n        kept.append(cell)\n\
+          \    nb[\"cells\"] = kept\n    if removed:\n        print(f\"Stripped {removed}\
+          \ kernel-shutdown cell(s) from {notebook_name}\")\n\n    with tempfile.NamedTemporaryFile(\n\
+          \        mode=\"w\", suffix=\".ipynb\", dir=\"/tmp\", delete=False, encoding=\"\
+          utf-8\"\n    ) as tmp:\n        json.dump(nb, tmp, ensure_ascii=False)\n\
+          \        tmp.write(\"\\n\")\n        stripped_nb = tmp.name\n\n    subprocess.run(\n\
+          \        [\"papermill\", stripped_nb, output_nb,\n         \"--kernel\"\
+          , \"python3\", \"--no-progress-bar\"],\n        check=True, cwd=work_dir,\
+          \ env=env,\n    )\n    return output_nb\n\n"
+        env:
+        - name: HOME
+          value: /tmp
+        image: image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest
+        resources:
+          accelerator:
+            count: '1'
+            resourceCount: '1'
+            resourceType: nvidia.com/gpu
+            type: nvidia.com/gpu
+          cpuRequest: 4.0
+          memoryRequest: 32.0
+          resourceCpuRequest: '4'
+          resourceMemoryRequest: 32G
+    exec-xgboost-fraud-detection:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - xgboost_fraud_detection
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.13.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef xgboost_fraud_detection(work_dir: str, prev: str = \"\") -> str:\n\
+          \    \"\"\"Compare XGBoost with raw features vs. NeMo embeddings (notebook\
+          \ 05).\"\"\"\n    import json\n    import os\n    import subprocess\n  \
+          \  import sys\n    import tempfile\n\n    notebook_name = \"05_xgboost_fraud_detection.ipynb\"\
+          \n    env = os.environ.copy()\n    env[\"HOME\"] = \"/tmp\"\n\n    subprocess.run(\n\
+          \        [sys.executable, \"-m\", \"ipykernel\", \"install\",\n        \
+          \ \"--user\", \"--name\", \"python3\", \"--display-name\", \"Python 3\"\
+          ],\n        check=True, env=env,\n    )\n\n    SHUTDOWN_MARKERS = (\"do_shutdown(True)\"\
+          , \"IPython.Application.instance()\")\n    input_nb = os.path.join(work_dir,\
+          \ notebook_name)\n    output_nb = os.path.join(work_dir, \"pipeline-outputs\"\
+          , notebook_name)\n    os.makedirs(os.path.dirname(output_nb), exist_ok=True)\n\
+          \n    with open(input_nb, encoding=\"utf-8\") as f:\n        nb = json.load(f)\n\
+          \n    kept, removed = [], 0\n    for cell in nb[\"cells\"]:\n        if\
+          \ cell.get(\"cell_type\") == \"code\":\n            src = \"\".join(cell.get(\"\
+          source\", []))\n            if all(m in src for m in SHUTDOWN_MARKERS):\n\
+          \                removed += 1\n                continue\n        kept.append(cell)\n\
+          \    nb[\"cells\"] = kept\n    if removed:\n        print(f\"Stripped {removed}\
+          \ kernel-shutdown cell(s) from {notebook_name}\")\n\n    with tempfile.NamedTemporaryFile(\n\
+          \        mode=\"w\", suffix=\".ipynb\", dir=\"/tmp\", delete=False, encoding=\"\
+          utf-8\"\n    ) as tmp:\n        json.dump(nb, tmp, ensure_ascii=False)\n\
+          \        tmp.write(\"\\n\")\n        stripped_nb = tmp.name\n\n    subprocess.run(\n\
+          \        [\"papermill\", stripped_nb, output_nb,\n         \"--kernel\"\
+          , \"python3\", \"--no-progress-bar\"],\n        check=True, cwd=work_dir,\
+          \ env=env,\n    )\n    return output_nb\n\n"
+        env:
+        - name: HOME
+          value: /tmp
+        image: image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest
+        resources:
+          cpuRequest: 4.0
+          memoryRequest: 16.0
+          resourceCpuRequest: '4'
+          resourceMemoryRequest: 16G
+pipelineInfo:
+  description: 'End-to-end NeMo decoder foundation model: data prep -> tokenisation
+    -> pre-training -> embedding extraction -> fraud detection'
+  name: nemo-transaction-foundation-model
+root:
+  dag:
+    tasks:
+      dataset-baseline:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-dataset-baseline
+        inputs:
+          parameters:
+            work_dir:
+              componentInputParameter: work_dir
+        taskInfo:
+          name: dataset-baseline
+      foundation-model-training:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-foundation-model-training
+        dependentTasks:
+        - seq-preproc-tokenization
+        inputs:
+          parameters:
+            prev:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: seq-preproc-tokenization
+            work_dir:
+              componentInputParameter: work_dir
+        taskInfo:
+          name: foundation-model-training
+      inference-embedding-extraction:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-inference-embedding-extraction
+        dependentTasks:
+        - foundation-model-training
+        inputs:
+          parameters:
+            prev:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: foundation-model-training
+            work_dir:
+              componentInputParameter: work_dir
+        taskInfo:
+          name: inference-embedding-extraction
+      seq-preproc-tokenization:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-seq-preproc-tokenization
+        dependentTasks:
+        - dataset-baseline
+        inputs:
+          parameters:
+            prev:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: dataset-baseline
+            work_dir:
+              componentInputParameter: work_dir
+        taskInfo:
+          name: seq-preproc-tokenization
+      xgboost-fraud-detection:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-xgboost-fraud-detection
+        dependentTasks:
+        - inference-embedding-extraction
+        inputs:
+          parameters:
+            prev:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: inference-embedding-extraction
+            work_dir:
+              componentInputParameter: work_dir
+        taskInfo:
+          name: xgboost-fraud-detection
+  inputDefinitions:
+    parameters:
+      work_dir:
+        defaultValue: /opt/app-root/src/nemo-tfm
+        isOptional: true
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.13.0
+---
+platforms:
+  kubernetes:
+    deploymentSpec:
+      executors:
+        exec-dataset-baseline:
+          pvcMount:
+          - constant: nemo-tfm-workbench-data
+            mountPath: /opt/app-root/src
+            pvcNameParameter:
+              runtimeValue:
+                constant: nemo-tfm-workbench-data
+        exec-foundation-model-training:
+          pvcMount:
+          - constant: nemo-tfm-workbench-data
+            mountPath: /opt/app-root/src
+            pvcNameParameter:
+              runtimeValue:
+                constant: nemo-tfm-workbench-data
+        exec-inference-embedding-extraction:
+          pvcMount:
+          - constant: nemo-tfm-workbench-data
+            mountPath: /opt/app-root/src
+            pvcNameParameter:
+              runtimeValue:
+                constant: nemo-tfm-workbench-data
+        exec-seq-preproc-tokenization:
+          pvcMount:
+          - constant: nemo-tfm-workbench-data
+            mountPath: /opt/app-root/src
+            pvcNameParameter:
+              runtimeValue:
+                constant: nemo-tfm-workbench-data
+        exec-xgboost-fraud-detection:
+          pvcMount:
+          - constant: nemo-tfm-workbench-data
+            mountPath: /opt/app-root/src
+            pvcNameParameter:
+              runtimeValue:
+                constant: nemo-tfm-workbench-data

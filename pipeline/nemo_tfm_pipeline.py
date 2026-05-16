@@ -226,6 +226,7 @@ def foundation_model_training(work_dir: str, prev: str = "") -> str:
 @component(base_image=IMAGE)
 def inference_embedding_extraction(work_dir: str, prev: str = "") -> str:
     """Extract 512-d embeddings from the trained decoder model (notebook 04)."""
+    import glob
     import json
     import os
     import subprocess
@@ -235,6 +236,63 @@ def inference_embedding_extraction(work_dir: str, prev: str = "") -> str:
     notebook_name = "04_inference_embedding_extraction.ipynb"
     env = os.environ.copy()
     env["HOME"] = "/tmp"
+
+    # ---------------------------------------------------------------------------
+    # Smudge Git LFS pointer files in models/decoder-foundation-model/
+    # The repo clone on the PVC may only have LFS pointer files (133-byte ASCII)
+    # if `git lfs pull` was never run interactively.  This block detects any
+    # pointer files and downloads the real blobs from GitHub LFS automatically.
+    # ---------------------------------------------------------------------------
+    LFS_REPO = (
+        "https://github.com/robbybrodie/"
+        "transaction-foundation-model-openshiftai.git"
+    )
+    models_dir = os.path.join(work_dir, "models", "decoder-foundation-model")
+    for model_path in glob.glob(os.path.join(models_dir, "*.safetensors")):
+        with open(model_path, "rb") as _f:
+            header = _f.read(50)
+        if not header.startswith(b"version https://git-lfs"):
+            continue
+        # It's a pointer — parse OID and size
+        with open(model_path, encoding="utf-8") as _f:
+            pointer_text = _f.read()
+        oid = next(
+            line.split("sha256:")[1].strip()
+            for line in pointer_text.splitlines()
+            if line.startswith("oid ")
+        )
+        size = int(next(
+            line.split()[1]
+            for line in pointer_text.splitlines()
+            if line.startswith("size ")
+        ))
+        print(
+            f"LFS pointer detected: {os.path.basename(model_path)} "
+            f"({size:,} bytes). Fetching real blob..."
+        )
+        batch_body = json.dumps({
+            "operation": "download",
+            "transfers": ["basic"],
+            "objects": [{"oid": oid, "size": size}],
+        })
+        batch_result = subprocess.run(
+            [
+                "curl", "-s", "-X", "POST",
+                "-H", "Content-Type: application/vnd.git-lfs+json",
+                "-H", "Accept: application/vnd.git-lfs+json",
+                f"{LFS_REPO}/info/lfs/objects/batch",
+                "-d", batch_body,
+            ],
+            capture_output=True, text=True, check=True,
+        )
+        batch_resp = json.loads(batch_result.stdout)
+        download_url = batch_resp["objects"][0]["actions"]["download"]["href"]
+        print(f"Downloading {os.path.basename(model_path)}...")
+        subprocess.run(
+            ["curl", "-L", "-o", model_path, download_url],
+            check=True, env=env,
+        )
+        print(f"Smudged: {os.path.basename(model_path)} = {os.path.getsize(model_path):,} bytes")
 
     subprocess.run(
         [sys.executable, "-m", "ipykernel", "install",
