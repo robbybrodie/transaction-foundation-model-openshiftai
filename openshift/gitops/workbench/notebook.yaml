@@ -34,17 +34,17 @@ spec:
     spec:
       # Clones the repo and pulls Git LFS model files on first boot.
       # Idempotent: skips clone if .git already exists (PVC survives pod restarts).
-      # Uses alpine:3.19 — available immediately, does not wait for the workbench
-      # image build to complete. Security context matches restricted-v2 SCC.
+      # Uses bitnami/git — has git + git-lfs pre-installed, runs non-root,
+      # compatible with OpenShift restricted-v2 SCC. Available immediately;
+      # does not wait for the workbench image build to complete.
       initContainers:
         - name: git-clone
-          image: alpine:3.19
+          image: bitnami/git:2.44.0
           command:
             - /bin/sh
             - -c
             - |
               set -e
-              apk add --no-cache git git-lfs >/dev/null
               REPO=/opt/app-root/src/nemo-tfm
               if [ -d "${REPO}/.git" ]; then
                 echo "Repo already present — skipping clone"
