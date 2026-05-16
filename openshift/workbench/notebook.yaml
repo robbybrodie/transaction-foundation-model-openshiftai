@@ -34,6 +34,15 @@ metadata:
 spec:
   template:
     spec:
+      # Pin the workbench to a GPU node. Combined with the pipeline's
+      # nodeSelector (same label), this guarantees the workbench and all
+      # pipeline steps land on the same node — required because the shared
+      # PVC (nemo-tfm-workbench-data) is EBS ReadWriteOnce (one node only).
+      # Deployment requirement: the GPU node must have ≥ 2 GPUs so the
+      # workbench (1 GPU) and sequential pipeline GPU steps (1 GPU each)
+      # can coexist. Recommended: g6.12xlarge (4×L4) or p4d.24xlarge (8×A100).
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
       containers:
         - name: nemo-tfm-workbench
           image: image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest

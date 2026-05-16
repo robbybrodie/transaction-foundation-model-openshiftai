@@ -522,6 +522,9 @@ platforms:
     deploymentSpec:
       executors:
         exec-dataset-baseline:
+          nodeSelector:
+            labels:
+              nvidia.com/gpu.present: 'true'
           pvcMount:
           - constant: nemo-tfm-workbench-data
             mountPath: /opt/app-root/src
@@ -529,6 +532,9 @@ platforms:
               runtimeValue:
                 constant: nemo-tfm-workbench-data
         exec-foundation-model-training:
+          nodeSelector:
+            labels:
+              nvidia.com/gpu.present: 'true'
           pvcMount:
           - constant: nemo-tfm-workbench-data
             mountPath: /opt/app-root/src
@@ -536,6 +542,9 @@ platforms:
               runtimeValue:
                 constant: nemo-tfm-workbench-data
         exec-inference-embedding-extraction:
+          nodeSelector:
+            labels:
+              nvidia.com/gpu.present: 'true'
           pvcMount:
           - constant: nemo-tfm-workbench-data
             mountPath: /opt/app-root/src
@@ -543,6 +552,9 @@ platforms:
               runtimeValue:
                 constant: nemo-tfm-workbench-data
         exec-seq-preproc-tokenization:
+          nodeSelector:
+            labels:
+              nvidia.com/gpu.present: 'true'
           pvcMount:
           - constant: nemo-tfm-workbench-data
             mountPath: /opt/app-root/src
@@ -550,6 +562,9 @@ platforms:
               runtimeValue:
                 constant: nemo-tfm-workbench-data
         exec-xgboost-fraud-detection:
+          nodeSelector:
+            labels:
+              nvidia.com/gpu.present: 'true'
           pvcMount:
           - constant: nemo-tfm-workbench-data
             mountPath: /opt/app-root/src

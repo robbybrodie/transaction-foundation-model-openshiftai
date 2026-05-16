@@ -409,6 +409,19 @@ def _configure_task(task):
     # Disable KFP caching — notebooks write results to the shared PVC so every
     # run should execute all steps rather than silently reusing stale outputs.
     task.set_caching_options(enable_caching=False)
+    # Pin every pipeline step to the same GPU node as the workbench.
+    # The shared PVC is EBS ReadWriteOnce — it can only attach to one node at
+    # a time.  The workbench's nodeSelector uses the same label, so both land
+    # on the same node regardless of cluster topology.
+    # Infrastructure requirement: the GPU node must have ≥ 2 GPUs (e.g.
+    # g6.12xlarge = 4×L4, or p4d.24xlarge = 8×A100 with MIG) so that the
+    # workbench (1 GPU) and sequential pipeline GPU steps (1 GPU each) can
+    # coexist without resource contention.
+    kubernetes.add_node_selector(
+        task,
+        label_key="nvidia.com/gpu.present",
+        label_value="true",
+    )
     return task
 
 

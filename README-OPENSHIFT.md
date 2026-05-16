@@ -83,10 +83,31 @@ are all fine as long as the GPU and operator requirements below are met.
 
 | Requirement | Detail |
 |---|---|
-| GPU | NVIDIA A100 (80 GB) or H100 recommended for full training; L4 is sufficient for the 30-step demo |
+| GPU | **≥ 2 GPUs on a single node** — the workbench holds 1 GPU; sequential pipeline GPU steps each need 1 GPU; both must coexist on the same node because the shared PVC is EBS ReadWriteOnce (one node only). Recommended: `g6.12xlarge` (4 × L4 24 GB) for demo; `p4d.24xlarge` (8 × A100 40 GB) or `p5.48xlarge` (8 × H100 80 GB) for production |
 | CUDA | 12.x (provided by the NeMo container — no host CUDA install needed) |
 | Root volume | **300 GB minimum** — the NeMo base image is ~25 GB; the default 120 GB disk causes eviction during the BuildConfig image build |
-| Count | 1 GPU node minimum; more for multi-node training |
+| Count | 1 GPU node (multi-GPU). Multi-node is not required — the pipeline steps are sequential |
+
+> **Why a single multi-GPU node?**
+> The workbench PVC uses `accessModes: ReadWriteOnce` (EBS), which attaches to
+> exactly one EC2 instance. The workbench and all pipeline steps declare
+> `nodeSelector: nvidia.com/gpu.present: "true"`, so they all land on the same
+> GPU node. With ≥ 2 GPUs on that node, the workbench (1 GPU) and each
+> sequential pipeline GPU step (1 GPU) can coexist without contention.
+>
+> **MIG alternative (A100 / H100 only):**
+> On A100 or H100 nodes, you can use MIG partitioning instead of a multi-GPU
+> node. Enable MIG mode via the GPU Operator, configure a profile (e.g.
+> `3g.40gb` on an A100 40 GB — gives 2 independent slices), then substitute the
+> resource name in `notebook.yaml` and the pipeline accelerator calls:
+> ```yaml
+> # notebook.yaml resources — replace nvidia.com/gpu with MIG profile:
+> nvidia.com/mig-3g.40gb: "1"
+> # pipeline/nemo_tfm_pipeline.py accelerator calls — e.g.:
+> s2.set_accelerator_type("nvidia.com/mig-3g.40gb").set_accelerator_limit(1)
+> ```
+> The `nodeSelector: nvidia.com/gpu.present: "true"` remains unchanged —
+> the GPU Operator sets this label on any GPU node, MIG or otherwise.
 
 #### RHOAI and operators (cluster-admin, one-time)
 
