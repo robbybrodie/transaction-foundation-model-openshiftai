@@ -406,6 +406,9 @@ def _configure_task(task):
     # always writable, fixing both the launcher bootstrap and any %pip install
     # cells inside the notebooks.
     task.set_env_variable("HOME", "/tmp")
+    # Disable KFP caching — notebooks write results to the shared PVC so every
+    # run should execute all steps rather than silently reusing stale outputs.
+    task.set_caching_options(enable_caching=False)
     return task
 
 
