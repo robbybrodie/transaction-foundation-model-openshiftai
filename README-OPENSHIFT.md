@@ -442,9 +442,85 @@ curl -s "https://${INFER_URL}/v1/models" | python3 -m json.tool
 
 ---
 
+## GitOps deploy (preferred)
+
+If OpenShift GitOps (ArgoCD) is available on your cluster, a single `oc apply`
+deploys and reconciles the full project continuously from Git.
+
+### Prerequisites
+
+```bash
+# Install OpenShift GitOps operator (cluster-admin, once per cluster)
+oc apply -f openshift/gitops-install/gitops-subscription.yaml
+
+# Wait for ArgoCD pods to be Running (~3 min)
+oc get pods -n openshift-gitops
+
+# Get the ArgoCD UI URL
+oc get route openshift-gitops-server -n openshift-gitops -o jsonpath='{.spec.host}'
+```
+
+### Deploy
+
+```bash
+# Single command deploys everything in sync-wave order
+oc apply -f openshift/argocd/application.yaml
+
+# Monitor sync status
+oc get application nemo-tfm -n openshift-gitops
+```
+
+ArgoCD applies resources in this order (sync-wave):
+
+| Wave | Resource | Notes |
+|------|----------|-------|
+| -1 | `namespace.yaml` | Creates the `nemo-tfm` project |
+| 0 | `secrets/*.sealed.yaml`, `rbac/service-accounts.yaml`, `rbac/sa-pull-secrets.yaml` | Secrets decrypted by Sealed Secrets controller; RBAC wired up |
+| 1 | `notebook-image/imagestream.yaml` | Registers image with RHOAI dashboard |
+| 2 | `notebook-image/buildconfig.yaml` | ConfigChange trigger fires the first build automatically |
+| 3 | `pipeline/dspa.yaml` | KFP 2.x pipeline server |
+| 4 | `workbench/notebook.yaml` + PVC | Workbench (retries until build completes) |
+| 5 | `serving/serving-runtime.yaml` | vLLM ServingRuntime |
+| 6 | `serving/inference-service.yaml` | KServe model endpoint |
+
+### Re-sealing secrets
+
+Secrets are encrypted with the cluster's Sealed Secrets public key. If you
+rotate credentials or deploy to a new cluster, re-seal from the local plain
+secrets (which are gitignored and never committed):
+
+```bash
+# Re-seal both secrets for the nemo-tfm namespace
+kubeseal --scope namespace-wide --namespace nemo-tfm --format yaml \
+  < openshift/secrets/registry-credentials.yaml \
+  > openshift/gitops/secrets/registry-pull-secret.sealed.yaml
+
+kubeseal --scope namespace-wide --namespace nemo-tfm --format yaml \
+  < openshift/secrets/workbench-secret.yaml \
+  > openshift/gitops/secrets/workbench-runtime-secret.sealed.yaml
+
+# The sealed files are safe to commit — they are encrypted with the cluster
+# public key and can only be decrypted inside the nemo-tfm namespace.
+git add openshift/gitops/secrets/*.sealed.yaml
+git commit -m "Rotate sealed secrets"
+git push
+# ArgoCD picks up the new sealed secrets and reconciles within ~30s
+```
+
+> **Production note:** For multi-cluster or key-rotation scenarios, consider
+> External Secrets Operator (ESO) backed by HashiCorp Vault or AWS Secrets
+> Manager instead of Sealed Secrets. The GitOps structure here is compatible
+> with ESO: replace `*.sealed.yaml` with `ExternalSecret` CRs pointing to your
+> secrets store.
+
+---
+
 ## Automated bootstrap
 
-The bootstrap script performs all of the above in a single run:
+The bootstrap script performs all of the above imperatively — use it when
+GitOps is not available or for local development.
+
+> **Prefer GitOps.** See the section above for the recommended deploy path.
 
 ```bash
 source openshift/secrets/cluster-credentials.env
@@ -510,32 +586,42 @@ oc get events -n nemo-tfm --sort-by=.lastTimestamp
 
 ```
 openshift/
-├── implementation-notes.md        ← architectural decision record
+├── gitops/                          ← ArgoCD-managed manifests (canonical)
+│   ├── namespace.yaml               ← Namespace CR (wave -1)
+│   ├── secrets/
+│   │   ├── registry-pull-secret.sealed.yaml    ← SealedSecret (wave 0)
+│   │   └── workbench-runtime-secret.sealed.yaml ← SealedSecret (wave 0)
+│   ├── rbac/
+│   │   ├── service-accounts.yaml    ← SA + ClusterRole + RoleBinding (wave 0)
+│   │   └── sa-pull-secrets.yaml     ← SA imagePullSecrets patches (wave 0)
+│   ├── notebook-image/
+│   │   ├── imagestream.yaml         ← ImageStream (wave 1)
+│   │   └── buildconfig.yaml         ← BuildConfig (wave 2)
+│   ├── pipeline/
+│   │   └── dspa.yaml                ← DataSciencePipelinesApplication (wave 3)
+│   ├── workbench/
+│   │   └── notebook.yaml            ← Notebook CR + PVC (wave 4)
+│   └── serving/
+│       ├── serving-runtime.yaml     ← ServingRuntime (wave 5)
+│       └── inference-service.yaml   ← InferenceService (wave 6)
+├── argocd/
+│   └── application.yaml             ← ArgoCD Application CR
+├── gitops-install/
+│   └── gitops-subscription.yaml     ← OpenShift GitOps operator Subscription
 ├── notebook-image/
-│   ├── Dockerfile                 ← FROM nvcr.io/nvidia/nemo:25.09.01
-│   ├── imagestream.yaml           ← ImageStream (image.openshift.io/v1)
-│   └── buildconfig.yaml           ← BuildConfig (build.openshift.io/v1)
-├── rbac/
-│   └── service-accounts.yaml      ← SA + ClusterRole + RoleBinding
-├── workbench/
-│   └── notebook.yaml              ← Notebook CR (kubeflow.org/v1)
+│   └── Dockerfile                   ← FROM nvcr.io/nvidia/nemo:25.09.01
 ├── training/
-│   └── pytorchjob.yaml            ← PyTorchJob CR (kubeflow.org/v1)
-├── pipeline/
-│   └── dspa.yaml                  ← DataSciencePipelinesApplication
-├── serving/
-│   ├── serving-runtime.yaml       ← ServingRuntime (serving.kserve.io/v1alpha1)
-│   └── inference-service.yaml     ← InferenceService (serving.kserve.io/v1beta1)
+│   └── pytorchjob.yaml              ← PyTorchJob CR (manual — not GitOps)
 ├── templates/
-│   └── nemo-tfm-template.yaml     ← OpenShift Template (template.openshift.io/v1)
+│   └── nemo-tfm-template.yaml       ← OpenShift Template (oc process)
 ├── scripts/
-│   └── bootstrap-project.sh       ← one-shot bootstrap using oc
+│   └── bootstrap-project.sh         ← imperative fallback bootstrap
 └── secrets/
     ├── README.md
     ├── cluster-credentials.template.env
     ├── ai-platform.template.env
-    ├── registry-credentials.template.yaml
-    └── workbench-secret.template.yaml
+    ├── registry-credentials.template.yaml   ← gitignored when populated
+    └── workbench-secret.template.yaml       ← gitignored when populated
 ```
 
 ---

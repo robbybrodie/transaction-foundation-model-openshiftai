@@ -103,20 +103,43 @@ The YAML config uses `_target_` to reference Python classes/functions by dotted 
 
 The `openshift/` directory contains RHOAI 3.3 operator Custom Resources (not raw Kubernetes manifests). All resources are applied with `oc`, not `kubectl`, to an OpenShift **project** (`oc new-project`).
 
-### CR inventory
+### GitOps deploy (preferred)
 
-| File | Kind / apiVersion | Purpose |
-|------|-------------------|---------|
-| `notebook-image/imagestream.yaml` | `ImageStream` (image.openshift.io/v1) | Registers custom NeMo workbench image with RHOAI dashboard via `opendatahub.io/notebook-image: "true"` label |
-| `notebook-image/buildconfig.yaml` | `BuildConfig` (build.openshift.io/v1) | Builds workbench image inside the cluster (Docker strategy — NeMo base is not S2I-compatible) |
-| `workbench/notebook.yaml` | `Notebook` (kubeflow.org/v1) | RHOAI Workbench; controller injects StatefulSet, Route, OAuth proxy sidecar — do NOT set `serviceAccountName` |
-| `training/pytorchjob.yaml` | `PyTorchJob` (kubeflow.org/v1) | Distributed training; must use `serviceAccountName: nemo-tfm-training` for `anyuid` SCC |
-| `pipeline/dspa.yaml` | `DataSciencePipelinesApplication` (v1alpha1) | Provisions KFP 2.5 pipeline server stack |
-| `serving/serving-runtime.yaml` | `ServingRuntime` (serving.kserve.io/v1alpha1) | Model server container template |
-| `serving/inference-service.yaml` | `InferenceService` (serving.kserve.io/v1beta1) | KServe RawDeployment model endpoint |
-| `rbac/service-accounts.yaml` | SA + ClusterRole + RoleBinding | Grants `anyuid` SCC to `nemo-tfm-training` SA (NeMo runs as root; `restricted-v2` default SCC blocks this) |
-| `templates/nemo-tfm-template.yaml` | `Template` (template.openshift.io/v1) | Parameterised deploy via `oc process` |
-| `scripts/bootstrap-project.sh` | — | One-shot bootstrap for all of the above |
+```bash
+# Install GitOps operator (once per cluster)
+oc apply -f openshift/gitops-install/gitops-subscription.yaml
+# Wait ~3 min, then:
+oc apply -f openshift/argocd/application.yaml
+```
+
+ArgoCD syncs `openshift/gitops/` in sync-wave order (-1 through 6).
+Sealed Secrets are committed to `openshift/gitops/secrets/*.sealed.yaml` —
+encrypted with the cluster public key, safe to commit. Re-seal with:
+```bash
+kubeseal --scope namespace-wide --namespace nemo-tfm --format yaml \
+  < openshift/secrets/registry-credentials.yaml \
+  > openshift/gitops/secrets/registry-pull-secret.sealed.yaml
+```
+
+### CR inventory (openshift/gitops/)
+
+| File | Kind / apiVersion | Wave | Purpose |
+|------|-------------------|------|---------|
+| `namespace.yaml` | `Namespace` (v1) | -1 | Creates `nemo-tfm` project |
+| `secrets/registry-pull-secret.sealed.yaml` | `SealedSecret` (bitnami.com/v1alpha1) | 0 | nvcr.io pull credentials |
+| `secrets/workbench-runtime-secret.sealed.yaml` | `SealedSecret` (bitnami.com/v1alpha1) | 0 | NGC key, S3 credentials |
+| `rbac/service-accounts.yaml` | SA + ClusterRole + RoleBinding | 0 | Grants `anyuid` SCC to `nemo-tfm-training` SA |
+| `rbac/sa-pull-secrets.yaml` | SA patches | 0 | Links pull secret to `default` and `builder` SAs |
+| `notebook-image/imagestream.yaml` | `ImageStream` (image.openshift.io/v1) | 1 | Registers custom NeMo workbench image with RHOAI dashboard |
+| `notebook-image/buildconfig.yaml` | `BuildConfig` (build.openshift.io/v1) | 2 | Builds workbench image; ConfigChange trigger fires on GitOps sync |
+| `pipeline/dspa.yaml` | `DataSciencePipelinesApplication` (v1) | 3 | KFP 2.5 pipeline server stack |
+| `workbench/notebook.yaml` | `Notebook` (kubeflow.org/v1) + PVC | 4 | RHOAI Workbench; controller injects StatefulSet, Route, OAuth proxy |
+| `serving/serving-runtime.yaml` | `ServingRuntime` (serving.kserve.io/v1alpha1) | 5 | vLLM model server template |
+| `serving/inference-service.yaml` | `InferenceService` (serving.kserve.io/v1beta1) | 6 | KServe RawDeployment model endpoint |
+
+Training (`openshift/training/pytorchjob.yaml`) remains manual — not managed by ArgoCD.
+
+Imperative fallback: `NAMESPACE=nemo-tfm bash openshift/scripts/bootstrap-project.sh`
 
 ### Key constraints
 

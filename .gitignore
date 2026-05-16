@@ -54,3 +54,12 @@ openshift-login.sh
 !*.template.env
 !*.template.yaml
 !*.template.json
+
+# Re-allow all manifests under openshift/gitops/ — no plain secrets live there.
+# The secrets/ subdirectory only holds *.sealed.yaml (encrypted), which are safe.
+!openshift/gitops/**/*.yaml
+!openshift/gitops/*.yaml
+
+# Also allow the ArgoCD Application and GitOps operator Subscription
+!openshift/argocd/*.yaml
+!openshift/gitops-install/*.yaml

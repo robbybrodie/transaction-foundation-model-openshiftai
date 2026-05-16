@@ -1,0 +1,55 @@
+# Model Serving Runtime — ServingRuntime CR
+# Wave 5: applied after the workbench and DSPA are in place.
+#
+# Defines the container template for the model server. KServe (v0.15,
+# managed by RHOAI 3.3) reconciles this into a Deployment when referenced
+# by an InferenceService.
+#
+# IMPORTANT: nvidia.com/gpu is declared HERE only — do NOT repeat it in the
+# InferenceService predictor. Conflicting GPU declarations cause scheduling
+# errors when KServe merges the two resource specs.
+#
+# Check built-in runtimes before creating a custom one:
+#   oc get servingruntimes -n redhat-ods-applications
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  name: nemo-tfm-serving-runtime
+  namespace: nemo-tfm
+  labels:
+    opendatahub.io/dashboard: "true"
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+    openshift.io/display-name: "NeMo Transaction Foundation Model Runtime"
+    opendatahub.io/template-name: "vllm-runtime"
+    opendatahub.io/template-display-name: "vLLM NVIDIA GPU ServingRuntime"
+spec:
+  supportedModelFormats:
+    - name: pytorch
+      version: "2"
+      autoSelect: true
+
+  multiModel: false
+
+  containers:
+    - name: kserve-container
+      image: quay.io/modh/vllm:rhoai-2.20-cuda
+      command: ["python", "-m", "vllm.entrypoints.openai.api_server"]
+      args:
+        - "--model=/mnt/models"
+        - "--dtype=bfloat16"
+        - "--max-model-len=4096"
+        - "--served-model-name=transaction-foundation-model"
+        - "--port=8080"
+      ports:
+        - containerPort: 8080
+          protocol: TCP
+      resources:
+        requests:
+          cpu: "4"
+          memory: 24Gi
+          nvidia.com/gpu: "1"
+        limits:
+          cpu: "4"
+          memory: 24Gi
+          nvidia.com/gpu: "1"

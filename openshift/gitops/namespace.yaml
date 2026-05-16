@@ -1,0 +1,15 @@
+# Namespace — declarative equivalent of: oc new-project nemo-tfm
+# Wave -1: created before everything else so subsequent resources have a namespace to land in.
+# ArgoCD Application uses CreateNamespace=false + ServerSideApply=true so this resource
+# owns the namespace definition and won't conflict with an existing project.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nemo-tfm
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    openshift.io/display-name: "NeMo Transaction Foundation Model"
+    openshift.io/description: "NeMo decoder foundation model — training, evaluation, and serving"
+  labels:
+    # Required for RHOAI dashboard to list this project
+    opendatahub.io/dashboard: "true"

@@ -1,0 +1,58 @@
+# ArgoCD Application — deploys the full nemo-tfm project from Git.
+#
+# Prerequisites (apply once as cluster-admin before this file):
+#   oc apply -f openshift/gitops-install/gitops-subscription.yaml
+#   # Wait ~3 min for ArgoCD pods to be Running in openshift-gitops:
+#   oc get pods -n openshift-gitops
+#
+# Then deploy:
+#   oc apply -f openshift/argocd/application.yaml
+#
+# Monitor sync:
+#   oc get application nemo-tfm -n openshift-gitops
+#   # Or open the ArgoCD UI:
+#   oc get route openshift-gitops-server -n openshift-gitops -o jsonpath='{.spec.host}'
+#
+# Teardown:
+#   oc delete application nemo-tfm -n openshift-gitops  # stops reconciliation
+#   oc delete project nemo-tfm                           # removes all resources
+#
+# Notes:
+# - path: openshift/gitops  (NOT openshift/) — avoids syncing training jobs,
+#   scripts, and templates that are managed manually.
+# - CreateNamespace=false: namespace.yaml (wave -1) manages the Namespace CR.
+# - ServerSideApply=true: required for the SA imagePullSecrets patches in
+#   rbac/sa-pull-secrets.yaml to merge with platform-managed fields.
+# - prune+selfHeal: ArgoCD removes resources deleted from Git and corrects drift.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nemo-tfm
+  namespace: openshift-gitops
+  labels:
+    app: nemo-tfm
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/robbybrodie/transaction-foundation-model-openshiftai
+    targetRevision: openshiftai-integration
+    path: openshift/gitops
+    directory:
+      recurse: true
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nemo-tfm
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # Do not create the namespace — namespace.yaml (wave -1) owns it
+      - CreateNamespace=false
+      # Required for SA imagePullSecrets patches to merge cleanly
+      - ServerSideApply=true
+      # Apply resources in sync-wave order
+      - RespectIgnoreDifferences=true

@@ -1,0 +1,63 @@
+# Workbench Image Build — BuildConfig CR
+# Wave 2: fires after the ImageStream (wave 1) exists so the output tag is valid.
+#
+# The ConfigChange trigger means ArgoCD applying this BuildConfig automatically
+# kicks off the first build — no manual `oc start-build` needed.
+#
+# Strategy: Docker (not S2I) — the Dockerfile is a plain multi-layer build
+# from the NVIDIA NeMo base image; S2I requires a specially-prepared assemble
+# script and is not appropriate here.
+#
+# The dockerStrategy.pullSecret grants pull rights to nvcr.io for the base
+# image (FROM nvcr.io/nvidia/nemo:25.09.01). The builder SA has push rights
+# to the integrated registry automatically (no pushSecret needed).
+#
+# Air-gapped / private fork override: if you mirror the repo internally,
+# replace the git.uri below with your internal mirror URL and add a
+# sourceSecret referencing an SSH key or token:
+#   source:
+#     git:
+#       uri: https://git.internal.example.com/nemo-tfm.git
+#       ref: main
+#     sourceSecret:
+#       name: git-source-secret  # Secret with ssh-privatekey or password field
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: nemo-tfm-workbench
+  namespace: nemo-tfm
+  labels:
+    app: nemo-tfm-workbench
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  runPolicy: Serial
+
+  source:
+    type: Git
+    git:
+      uri: https://github.com/robbybrodie/transaction-foundation-model-openshiftai
+      ref: openshiftai-integration
+    # contextDir is relative to the repo root.
+    # Only files under this directory are sent to the build daemon.
+    contextDir: openshift/notebook-image
+
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+      # Pull secret for nvcr.io (base image in FROM instruction).
+      pullSecret:
+        name: registry-pull-secret
+
+  output:
+    to:
+      kind: ImageStreamTag
+      name: nemo-tfm-workbench:latest
+
+  triggers:
+    # ConfigChange fires a build when ArgoCD applies this BuildConfig —
+    # no manual oc start-build needed after initial GitOps sync.
+    - type: ConfigChange
+    - type: ImageChange
+      imageChange: {}

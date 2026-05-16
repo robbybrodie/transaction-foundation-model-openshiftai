@@ -4,6 +4,13 @@
 # One-shot OpenShift project bootstrap for the NeMo Transaction Foundation
 # Model deployment. Applies all operator CRs in dependency order using oc.
 #
+# PREFERRED: Use GitOps instead of this script when OpenShift GitOps is available:
+#   oc apply -f openshift/gitops-install/gitops-subscription.yaml
+#   # Wait ~3 min for ArgoCD to be ready
+#   oc apply -f openshift/argocd/application.yaml
+#
+# This script is the imperative fallback when GitOps is not available.
+#
 # Prerequisites:
 #   - oc CLI logged in: oc login --server=<url> --token=<token>
 #   - Credentials populated in openshift/secrets/
@@ -38,7 +45,9 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 NAMESPACE="${NAMESPACE:-${OPENSHIFT_NAMESPACE:-}}"
 SECRETS_DIR="${SECRETS_DIR:-openshift/secrets}"
-MANIFESTS_DIR="${MANIFESTS_DIR:-openshift}"
+# Manifests live in openshift/gitops/ (ArgoCD-managed path) so the bootstrap
+# script and GitOps sync both reference the same canonical resource definitions.
+MANIFESTS_DIR="${MANIFESTS_DIR:-openshift/gitops}"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -192,8 +201,8 @@ echo "  oc apply -f openshift/training/pytorchjob.yaml -n $NAMESPACE"
 echo "  oc get pytorchjob nemo-tfm-pretrain -n $NAMESPACE"
 echo ""
 echo "Deploy model serving (after training is complete):"
-echo "  oc apply -f openshift/serving/serving-runtime.yaml -n $NAMESPACE"
-echo "  oc apply -f openshift/serving/inference-service.yaml -n $NAMESPACE"
+echo "  oc apply -f openshift/gitops/serving/serving-runtime.yaml -n $NAMESPACE"
+echo "  oc apply -f openshift/gitops/serving/inference-service.yaml -n $NAMESPACE"
 echo "  oc get inferenceservice nemo-tfm -n $NAMESPACE"
 echo ""
 echo "Get inference service route:"

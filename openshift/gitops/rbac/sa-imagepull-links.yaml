@@ -1,0 +1,34 @@
+# ServiceAccount image pull secret patches
+# Wave 0: declarative replacement for:
+#   oc secrets link default registry-pull-secret --for=pull
+#   oc secrets link builder registry-pull-secret
+#
+# With ServerSideApply=true in the ArgoCD Application syncOptions, these patches
+# merge cleanly with the platform-managed fields on the default and builder SAs.
+# ArgoCD only owns the imagePullSecrets / secrets fields it writes here.
+#
+# NOTE: These SAs are auto-created by OpenShift when the namespace is created.
+# They exist before this wave runs because the namespace (wave -1) is applied first.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: default
+  namespace: nemo-tfm
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+imagePullSecrets:
+  - name: registry-pull-secret
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: builder
+  namespace: nemo-tfm
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+imagePullSecrets:
+  - name: registry-pull-secret
+secrets:
+  - name: registry-pull-secret

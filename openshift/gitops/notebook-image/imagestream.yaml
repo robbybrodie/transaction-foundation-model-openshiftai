@@ -1,0 +1,21 @@
+# ImageStream — registers the custom NeMo workbench image with the RHOAI dashboard.
+# Wave 1: created before the BuildConfig so the output tag exists when the build fires.
+#
+# The opendatahub.io/notebook-image: "true" label causes the RHOAI dashboard to list
+# this image in the workbench launcher under "Custom notebook images".
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: nemo-tfm-workbench
+  namespace: nemo-tfm
+  labels:
+    opendatahub.io/notebook-image: "true"
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    opendatahub.io/notebook-image-name: "NeMo Transaction Foundation Model"
+    opendatahub.io/notebook-image-desc: "NVIDIA NeMo 25.09 with transaction foundation model dependencies"
+    opendatahub.io/notebook-image-url: "https://docs.nvidia.com/nemo-framework/user-guide/latest/"
+    opendatahub.io/notebook-image-order: "1"
+spec:
+  lookupPolicy:
+    local: true

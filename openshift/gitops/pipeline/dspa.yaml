@@ -1,0 +1,54 @@
+# Data Science Pipelines Server — DataSciencePipelinesApplication CR
+# Wave 3: applied after the workbench image build (wave 2). The DSPA does not
+# depend on the image build completing but must come after secrets (wave 0).
+#
+# RHOAI 3.3 ships Kubeflow Pipelines 2.5.0 (DSP 2.0).
+# apiVersion v1 is current for RHOAI 3.3 (replaces v1alpha1).
+#
+# The s3CredentialsSecret references workbench-runtime-secret which is
+# created by the SealedSecret in openshift/gitops/secrets/ (wave 0).
+apiVersion: datasciencepipelinesapplications.opendatahub.io/v1
+kind: DataSciencePipelinesApplication
+metadata:
+  name: pipelines-definition
+  namespace: nemo-tfm
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  apiServer:
+    deploy: true
+    enableSamplePipeline: false
+
+  persistenceAgent:
+    deploy: true
+
+  scheduledWorkflow:
+    deploy: true
+
+  # Object storage for pipeline artifacts (pipeline run metadata, outputs).
+  # The credentials Secret must exist before applying this CR — satisfied by
+  # the SealedSecret in openshift/gitops/secrets/ (wave 0).
+  objectStorage:
+    externalStorage:
+      host: s3.us-west-2.amazonaws.com
+      port: ""
+      bucket: nemo-tfm-pipelines-e17c4943
+      # region MUST be set explicitly — empty string defaults to "auto" at
+      # runtime, which causes S3 AuthorizationHeaderMalformed errors.
+      region: us-west-2
+      scheme: https
+      secure: true
+      s3CredentialsSecret:
+        secretName: workbench-runtime-secret
+        accessKey: MODEL_REGISTRY_ACCESS_KEY
+        secretKey: MODEL_REGISTRY_SECRET_KEY
+
+  # Internal MariaDB for pipeline metadata. For production, configure an
+  # external MySQL-compatible database under database.externalDB instead.
+  database:
+    mariaDB:
+      deploy: true
+      pipelineDBName: mlpipeline
+      pvcSize: 10Gi
+      username: mlpipeline
+      # No passwordSecret — DSPA operator auto-generates it

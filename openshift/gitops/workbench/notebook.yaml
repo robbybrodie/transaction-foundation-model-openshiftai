@@ -1,0 +1,77 @@
+# RHOAI Workbench — Notebook CR
+# Wave 4: applied after the DSPA (wave 3). The workbench image must exist
+# (built in wave 2) before the workbench pod can start, but the ArgoCD sync
+# won't block on build completion — the Notebook controller will retry until
+# the ImageStreamTag is available.
+#
+# DO NOT add securityContext, serviceAccountName, or port definitions —
+# the Kubeflow Notebook Controller injects these from the namespace SCC
+# and platform defaults.
+#
+# The nodeSelector pins the workbench to a GPU node. Combined with the
+# pipeline's nodeSelector (same label), this guarantees the workbench and
+# all pipeline steps land on the same node — required because the shared
+# PVC (nemo-tfm-workbench-data) is EBS ReadWriteOnce (one node only).
+apiVersion: kubeflow.org/v1
+kind: Notebook
+metadata:
+  name: nemo-tfm-workbench
+  namespace: nemo-tfm
+  labels:
+    app: nemo-tfm-workbench
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+    # Required: triggers oauth-proxy sidecar injection for SSO
+    notebooks.opendatahub.io/inject-oauth: 'true'
+    opendatahub.io/image-display-name: "NeMo Transaction Foundation Model"
+    openshift.io/display-name: "NeMo Transaction Foundation Model Workbench"
+    openshift.io/description: "Workbench for training and evaluating the transaction foundation model"
+    notebooks.opendatahub.io/last-image-selection: "nemo-tfm-workbench:latest"
+    opendatahub.io/username: kube:admin
+    notebooks.opendatahub.io/oauth-logout-url: 'https://rhods-dashboard-redhat-ods-applications.apps.ocpai-demo.sandbox3438.opentlc.com/projects/nemo-tfm?notebookLogout=nemo-tfm-workbench'
+spec:
+  template:
+    spec:
+      # Deployment requirement: GPU node must have ≥ 2 GPUs so the workbench
+      # (1 GPU) and sequential pipeline GPU steps (1 GPU each) can coexist.
+      # Recommended: g6.12xlarge (4×L4) or p4d.24xlarge (8×A100).
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      containers:
+        - name: nemo-tfm-workbench
+          image: image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: workbench-runtime-secret
+          resources:
+            requests:
+              cpu: "4"
+              memory: 32Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "8"
+              memory: 64Gi
+              nvidia.com/gpu: "1"
+          volumeMounts:
+            - name: workbench-data
+              mountPath: /opt/app-root/src
+      volumes:
+        - name: workbench-data
+          persistentVolumeClaim:
+            claimName: nemo-tfm-workbench-data
+---
+# PersistentVolumeClaim for workbench home directory
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nemo-tfm-workbench-data
+  namespace: nemo-tfm
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
