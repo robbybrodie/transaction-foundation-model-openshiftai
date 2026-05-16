@@ -77,7 +77,12 @@ def run_notebook(notebook_name: str, work_dir: str, prev: str = "") -> str:
 # ---------------------------------------------------------------------------
 
 def _configure_task(task):
-    kubernetes.mount_pvc(task, pvc_name=PVC_NAME, mount_path=WORK_DIR)
+    # Mount the PVC at /opt/app-root/src — the same mount point used by the
+    # workbench pod.  The repo is cloned to nemo-tfm/ within the PVC, so
+    # notebooks resolve correctly at WORK_DIR = /opt/app-root/src/nemo-tfm.
+    # (Mounting at WORK_DIR instead would put the PVC root one level too high,
+    # making notebooks unreachable at the path papermill expects.)
+    kubernetes.mount_pvc(task, pvc_name=PVC_NAME, mount_path="/opt/app-root/src")
     # The KFP launcher bootstraps itself by running 'pip install kfp' before
     # executing the component code.  Pipeline step pods run with a restricted
     # SCC (non-root, read-only system dirs) so pip defaults to --user install
