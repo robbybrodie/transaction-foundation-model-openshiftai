@@ -470,18 +470,58 @@ oc apply -f openshift/argocd/application.yaml
 oc get application nemo-tfm -n openshift-gitops
 ```
 
-ArgoCD applies resources in this order (sync-wave):
+Expected end state: **`Synced / Healthy`**
+
+### What GitOps manages automatically
+
+ArgoCD applies resources from `openshift/gitops/` in sync-wave order:
 
 | Wave | Resource | Notes |
 |------|----------|-------|
 | -1 | `namespace.yaml` | Creates the `nemo-tfm` project |
-| 0 | `secrets/*.sealed.yaml`, `rbac/service-accounts.yaml`, `rbac/sa-pull-secrets.yaml` | Secrets decrypted by Sealed Secrets controller; RBAC wired up |
+| 0 | `secrets/*.sealed.yaml`, `rbac/service-accounts.yaml`, `rbac/sa-imagepull-links.yaml` | Secrets decrypted by Sealed Secrets controller; RBAC wired up |
 | 1 | `notebook-image/imagestream.yaml` | Registers image with RHOAI dashboard |
 | 2 | `notebook-image/buildconfig.yaml` | ConfigChange trigger fires the first build automatically |
 | 3 | `pipeline/dspa.yaml` | KFP 2.x pipeline server |
 | 4 | `workbench/notebook.yaml` + PVC | Workbench (retries until build completes) |
-| 5 | `serving/serving-runtime.yaml` | vLLM ServingRuntime |
-| 6 | `serving/inference-service.yaml` | KServe model endpoint |
+
+### What requires manual steps (and why)
+
+| Step | Why it's manual |
+|------|-----------------|
+| **Training pipeline** (Step 6) | Intentional — takes hours on GPU; triggered from the workbench when you're ready |
+| **Model serving** (Step 7) | Intentional — KServe reconciles the InferenceService into a running Deployment immediately on sync; with no trained model in the PVC the predictor crash-loops and ArgoCD reports `Degraded` health permanently. Serving is applied imperatively once a model checkpoint is available. |
+
+### Deploying serving once you have a model
+
+After the training pipeline has written a checkpoint to the `nemo-tfm-model-output` PVC:
+
+```bash
+# 1. Create the model PVC (if not already present)
+oc apply -f openshift/serving/model-output-pvc.yaml -n nemo-tfm
+
+# 2. Deploy the serving stack
+oc apply -f openshift/serving/serving-runtime.yaml  -n nemo-tfm
+oc apply -f openshift/serving/inference-service.yaml -n nemo-tfm
+
+# 3. Watch until ready
+oc get inferenceservice nemo-tfm -n nemo-tfm -w
+
+# 4. Get the endpoint
+oc get route -l serving.kserve.io/inferenceservice=nemo-tfm -n nemo-tfm
+```
+
+### Validating without training or serving
+
+Notebooks 04 and 05 use the pretrained foundation model checkpoint committed to
+Git LFS (`models/decoder-foundation-model/`). They run entirely within the
+workbench — no training run required, no InferenceService required:
+
+- **Notebook 04** — embedding extraction from the pretrained checkpoint
+- **Notebook 05** — XGBoost fraud detection on the extracted embeddings
+
+This validates the full embedding pipeline on a Monday delivery before any
+GPU-hours are spent on retraining.
 
 ### Re-sealing secrets
 
@@ -586,24 +626,27 @@ oc get events -n nemo-tfm --sort-by=.lastTimestamp
 
 ```
 openshift/
-├── gitops/                          ← ArgoCD-managed manifests (canonical)
+├── gitops/                          ← ArgoCD sync path (auto-managed)
 │   ├── namespace.yaml               ← Namespace CR (wave -1)
 │   ├── secrets/
-│   │   ├── registry-pull-secret.sealed.yaml    ← SealedSecret (wave 0)
+│   │   ├── registry-pull-secret.sealed.yaml     ← SealedSecret (wave 0)
 │   │   └── workbench-runtime-secret.sealed.yaml ← SealedSecret (wave 0)
 │   ├── rbac/
 │   │   ├── service-accounts.yaml    ← SA + ClusterRole + RoleBinding (wave 0)
-│   │   └── sa-pull-secrets.yaml     ← SA imagePullSecrets patches (wave 0)
+│   │   ├── sa-imagepull-links.yaml  ← SA imagePullSecrets patches (wave 0)
+│   │   ├── argocd-admin.yaml        ← ArgoCD controller RoleBinding (wave 0)
+│   │   └── argocd-sealedsecret-access.yaml ← ArgoCD SealedSecret RBAC (wave 0)
 │   ├── notebook-image/
 │   │   ├── imagestream.yaml         ← ImageStream (wave 1)
 │   │   └── buildconfig.yaml         ← BuildConfig (wave 2)
 │   ├── pipeline/
 │   │   └── dspa.yaml                ← DataSciencePipelinesApplication (wave 3)
-│   ├── workbench/
-│   │   └── notebook.yaml            ← Notebook CR + PVC (wave 4)
-│   └── serving/
-│       ├── serving-runtime.yaml     ← ServingRuntime (wave 5)
-│       └── inference-service.yaml   ← InferenceService (wave 6)
+│   └── workbench/
+│       └── notebook.yaml            ← Notebook CR + PVC (wave 4)
+├── serving/                         ← Manual apply after training (not GitOps)
+│   ├── serving-runtime.yaml         ← ServingRuntime (vLLM GPU)
+│   ├── inference-service.yaml       ← InferenceService (KServe RawDeployment)
+│   └── model-output-pvc.yaml        ← PVC for trained model checkpoint
 ├── argocd/
 │   └── application.yaml             ← ArgoCD Application CR
 ├── gitops-install/

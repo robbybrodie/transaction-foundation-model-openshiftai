@@ -1,26 +1,14 @@
 # Model Endpoint — InferenceService CR
-# --------------------------------------
-# Declares the transaction foundation model serving endpoint.
+# Wave 6: applied last; depends on the ServingRuntime (wave 5) existing first.
+#
 # KServe (v0.15 in RHOAI 3.3) reconciles this into a Deployment, Service,
 # and Route. RawDeployment mode is the default in RHOAI 3.3.
 #
 # The model is loaded from the PVC containing the pretrained checkpoint
-# (models/decoder-foundation-model/ — pulled via git lfs).
+# (built by the pipeline or git-lfs-pulled manually).
 #
-# Source: RHOAI 3.3 Deploying Models (KServe RawDeployment)
-# https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.3/html-single/deploying_models/index
-#
-# GPU IMPORTANT: nvidia.com/gpu must NOT be set here if it is already set
-# in the ServingRuntime container spec. Conflicting GPU declarations cause
-# scheduling errors. Set GPU in one place only.
-#
-# Apply:
-#   oc apply -f openshift/serving/inference-service.yaml -n <your-namespace>
-#
-# Verify:
-#   oc get inferenceservice nemo-tfm -n <your-namespace>
-#   oc get route -l serving.kserve.io/inferenceservice=nemo-tfm -n <your-namespace>
-
+# GPU: Do NOT set nvidia.com/gpu here — it is declared in the ServingRuntime.
+# Conflicting GPU declarations cause scheduling errors.
 apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
@@ -29,21 +17,21 @@ metadata:
   labels:
     opendatahub.io/dashboard: "true"
   annotations:
+    argocd.argoproj.io/sync-wave: "6"
     openshift.io/display-name: "Transaction Foundation Model"
     # Required for KServe RawDeployment mode in RHOAI 3.3
     serving.kserve.io/deploymentMode: RawDeployment
 spec:
   predictor:
-    # Reference the custom ServingRuntime defined in serving-runtime.yaml.
-    # Remove this block to use a built-in RHOAI runtime instead.
     model:
       modelFormat:
         name: pytorch
         version: "2"
       runtime: nemo-tfm-serving-runtime
-      # Model loaded from a PVC containing the git-lfs-pulled checkpoint
+      # Model loaded from a PVC containing the pipeline-output checkpoint.
+      # Update this path after the training pipeline has completed.
       storageUri: pvc://nemo-tfm-model-output/decoder-foundation-model
-      # Do NOT set nvidia.com/gpu here — it is declared in the ServingRuntime
+      # Do NOT set nvidia.com/gpu here — declared in ServingRuntime only
       resources:
         requests:
           cpu: "4"

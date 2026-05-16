@@ -18,8 +18,15 @@
 #   oc delete project nemo-tfm                           # removes all resources
 #
 # Notes:
-# - path: openshift/gitops  (NOT openshift/) — avoids syncing training jobs,
-#   scripts, and templates that are managed manually.
+# - path: openshift/gitops  (NOT openshift/) — only infrastructure and workbench
+#   resources are auto-synced. Explicitly excluded:
+#     openshift/training/   — PyTorchJob, run manually after workbench is ready
+#     openshift/serving/    — ServingRuntime + InferenceService, applied manually
+#                             once a trained model checkpoint is available
+#   Serving is excluded because KServe reconciles the InferenceService into a
+#   Deployment immediately; with an empty model PVC the predictor crash-loops and
+#   the ArgoCD app reports Degraded health permanently. See openshift/serving/ for
+#   manifests to apply once your model is ready.
 # - CreateNamespace=false: namespace.yaml (wave -1) manages the Namespace CR.
 # - ServerSideApply=true: required for the SA imagePullSecrets patches in
 #   rbac/sa-pull-secrets.yaml to merge with platform-managed fields.

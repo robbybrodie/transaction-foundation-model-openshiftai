@@ -145,6 +145,11 @@ and the Kubeflow Pipelines UI. Requires S3-compatible object storage
 **Operator:** KServe v0.15 (managed by RHOAI operator, enabled via `DataScienceCluster`)
 **RHOAI 3.3 serving mode:** KServe **RawDeployment** (not Serverless/Knative)
 
+> **These manifests are NOT in the ArgoCD sync path.**
+> They live in `openshift/serving/` (not `openshift/gitops/serving/`) and
+> are applied manually once a trained model checkpoint is available.
+> See "Why serving is excluded from GitOps" below.
+
 #### ServingRuntime
 **apiVersion:** `serving.kserve.io/v1alpha1`
 **Kind:** `ServingRuntime`
@@ -327,3 +332,49 @@ oc process -f openshift/templates/nemo-tfm-template.yaml \
   -p GIT_REPO_URL=https://... \
 | oc apply -f -
 ```
+
+---
+
+## Why serving is excluded from GitOps auto-sync
+
+The `ServingRuntime` and `InferenceService` manifests live in
+`openshift/serving/` — outside the ArgoCD sync path (`openshift/gitops/`) —
+and are applied imperatively once a trained model checkpoint is ready.
+
+### The problem with including serving in GitOps
+
+KServe reconciles the `InferenceService` into a running `Deployment`
+immediately on sync. The predictor pod starts, mounts the model PVC, and
+tries to load the model. If the PVC is empty — which it always is before
+the training pipeline has run — the predictor crash-loops indefinitely.
+
+This causes the ArgoCD application to report `Degraded` health
+permanently, masking real infrastructure failures in the workbench, image
+build, or pipeline stack. A permanently red dashboard is worse than no
+dashboard entry.
+
+### The principle
+
+GitOps should only manage resources it can fully reconcile to a healthy
+state from a clean git clone. A trained model checkpoint is a runtime
+artifact produced by a GPU training job — it is not a git-tracked input
+and cannot be produced by the sync process itself. Including serving in the
+sync path conflates infrastructure state (what git declares) with runtime
+state (what training produced).
+
+### The approach
+
+- Infrastructure and workbench resources are in `openshift/gitops/` and
+  reconciled to `Synced / Healthy` by ArgoCD with no external dependencies.
+- Serving manifests are retained in `openshift/serving/` as reference
+  templates. The deploying team applies them imperatively once their model
+  checkpoint is in place:
+
+  ```bash
+  oc apply -f openshift/serving/model-output-pvc.yaml  -n nemo-tfm
+  oc apply -f openshift/serving/serving-runtime.yaml   -n nemo-tfm
+  oc apply -f openshift/serving/inference-service.yaml -n nemo-tfm
+  ```
+
+- Training (`openshift/training/pytorchjob.yaml`) follows the same
+  principle — it is always manual, never in the GitOps sync path.
