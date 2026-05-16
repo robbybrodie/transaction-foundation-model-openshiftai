@@ -27,7 +27,7 @@ WORK_DIR = "/opt/app-root/src/nemo-tfm"
 PIPELINE_NAME = "nemo-transaction-foundation-model"
 PIPELINE_DESCRIPTION = (
     "End-to-end NeMo decoder foundation model: "
-    "data prep → tokenisation → pre-training → embedding extraction → fraud detection"
+    "data prep -> tokenisation -> pre-training -> embedding extraction -> fraud detection"
 )
 
 
@@ -86,7 +86,7 @@ def nemo_tfm_pipeline(work_dir: str = WORK_DIR):
         notebook_name="01_dataset_baseline.ipynb",
         work_dir=work_dir,
     )
-    s1.set_display_name("1 · Dataset & XGBoost Baseline")
+    s1.set_display_name("1 - Dataset & XGBoost Baseline")
     s1.set_cpu_request("2").set_memory_request("8G")
     _with_pvc(s1)
 
@@ -96,7 +96,7 @@ def nemo_tfm_pipeline(work_dir: str = WORK_DIR):
         work_dir=work_dir,
         prev=s1.output,
     )
-    s2.set_display_name("2 · Sequence Tokenisation")
+    s2.set_display_name("2 - Sequence Tokenisation")
     s2.set_cpu_request("4").set_memory_request("32G")
     s2.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
     _with_pvc(s2)
@@ -107,7 +107,7 @@ def nemo_tfm_pipeline(work_dir: str = WORK_DIR):
         work_dir=work_dir,
         prev=s2.output,
     )
-    s3.set_display_name("3 · Foundation Model Pre-training")
+    s3.set_display_name("3 - Foundation Model Pre-training")
     s3.set_cpu_request("8").set_memory_request("64G")
     s3.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
     _with_pvc(s3)
@@ -118,7 +118,7 @@ def nemo_tfm_pipeline(work_dir: str = WORK_DIR):
         work_dir=work_dir,
         prev=s3.output,
     )
-    s4.set_display_name("4 · Embedding Extraction")
+    s4.set_display_name("4 - Embedding Extraction")
     s4.set_cpu_request("4").set_memory_request("32G")
     s4.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
     _with_pvc(s4)
@@ -129,7 +129,7 @@ def nemo_tfm_pipeline(work_dir: str = WORK_DIR):
         work_dir=work_dir,
         prev=s4.output,
     )
-    s5.set_display_name("5 · XGBoost Fraud Detection")
+    s5.set_display_name("5 - XGBoost Fraud Detection")
     s5.set_cpu_request("4").set_memory_request("16G")
     _with_pvc(s5)
 
