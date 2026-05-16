@@ -63,7 +63,7 @@ Git repo
 Full cluster setup — OpenShift install, operator subscriptions (NVIDIA GPU
 Operator, NFD, OSSM, Serverless, RHOAI), GPU `ClusterPolicy`, and
 `DataScienceCluster` configuration — is documented and scripted in the
-companion **[aws_ocp](../aws_ocp)** repository. Complete that setup first.
+companion **[aws_ocp](https://github.com/robbybrodie/aws_ocp)** repository. Complete that setup first.
 
 The cluster must have the following in place before continuing here:
 
