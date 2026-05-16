@@ -50,6 +50,13 @@ def run_notebook(notebook_name: str, work_dir: str, prev: str = "") -> str:
     output_nb = os.path.join(work_dir, "pipeline-outputs", notebook_name)
     os.makedirs(os.path.dirname(output_nb), exist_ok=True)
 
+    # Pipeline step pods run with a restricted SCC that cannot write to
+    # /opt/app-root/src/.local (the default pip --user install target).
+    # Set HOME=/tmp so %pip install cells use /tmp/.local instead.
+    env = os.environ.copy()
+    env["HOME"] = "/tmp"
+    os.makedirs("/tmp/.local", exist_ok=True)
+
     subprocess.run(
         [
             "papermill",
@@ -60,6 +67,7 @@ def run_notebook(notebook_name: str, work_dir: str, prev: str = "") -> str:
         ],
         check=True,
         cwd=work_dir,
+        env=env,
     )
     return output_nb
 
