@@ -157,8 +157,8 @@ info "ImageStreamTag nemo-tfm-workbench:latest is ready"
 # Step 9: DataSciencePipelinesApplication (pipeline server)
 # ---------------------------------------------------------------------------
 info "Verifying DSP operator CRD is installed..."
-oc get crd datasciencepipelinesapplications.opendatahub.io &>/dev/null || \
-    die "CRD datasciencepipelinesapplications.opendatahub.io not found — is the RHOAI operator installed and the DSP component enabled?"
+oc get crd datasciencepipelinesapplications.datasciencepipelinesapplications.opendatahub.io &>/dev/null || \
+    die "CRD datasciencepipelinesapplications not found — is the RHOAI operator installed and the DSP component enabled?"
 
 info "Applying DataSciencePipelinesApplication..."
 oc apply -f "$MANIFESTS_DIR/pipeline/dspa.yaml" -n "$NAMESPACE"
