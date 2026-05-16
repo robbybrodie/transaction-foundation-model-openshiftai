@@ -88,7 +88,7 @@ if oc get project "$NAMESPACE" &>/dev/null; then
 else
     oc new-project "$NAMESPACE" \
         --display-name="NeMo Transaction Foundation Model" \
-        --description="Westpac NeMo decoder foundation model — training, evaluation, and serving"
+        --description="NeMo decoder foundation model — training, evaluation, and serving"
 fi
 
 # Label the namespace so it appears as a managed project in the RHOAI dashboard.

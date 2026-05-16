@@ -312,7 +312,7 @@ research. It has the same structure as real transaction data (merchant
 categories, amounts, timestamps, fraud labels) but contains no real customer
 information.
 
-When adapting this to real Westpac transaction data, the main changes are:
+When adapting this to your own transaction data, the main changes are:
 1. Update the data loader in `01_dataset_baseline.ipynb` to point at your data source
 2. Update the tokeniser field list in `src/tokenizer/financial_pipeline.py`
    to match your schema
