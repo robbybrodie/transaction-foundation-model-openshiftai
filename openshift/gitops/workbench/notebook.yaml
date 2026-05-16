@@ -34,12 +34,13 @@ spec:
     spec:
       # Clones the repo and pulls Git LFS model files on first boot.
       # Idempotent: skips clone if .git already exists (PVC survives pod restarts).
-      # Uses bitnami/git — has git + git-lfs pre-installed, runs non-root,
-      # compatible with OpenShift restricted-v2 SCC. Available immediately;
-      # does not wait for the workbench image build to complete.
+      # Uses the same workbench image so no external pull is needed (image is
+      # in the cluster-internal registry after the BuildConfig completes).
+      # Has git and git-lfs pre-installed. Runs non-root (SCC-assigned UID),
+      # same UID as the main container so file ownership is consistent.
       initContainers:
         - name: git-clone
-          image: bitnami/git:2.44.0
+          image: image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest
           command:
             - /bin/sh
             - -c
