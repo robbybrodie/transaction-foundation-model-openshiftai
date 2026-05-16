@@ -42,25 +42,55 @@ def run_notebook(notebook_name: str, work_dir: str, prev: str = "") -> str:
     ``prev`` is intentionally unused — it exists only to wire a data-dependency
     between steps so KFP executes them sequentially rather than in parallel.
     Executed notebooks are saved to ``<work_dir>/pipeline-outputs/``.
+
+    Cells containing kernel-shutdown calls (``do_shutdown(True)`` or
+    ``IPython.Application.instance()``) are stripped before execution —
+    identical to the CI pipeline's ci_strip_kernel_shutdown.py logic.
+    These cells are meant for interactive workbench use and cause papermill
+    to receive a DeadKernelError mid-run when not stripped.
     """
+    import json
     import os
     import subprocess
+    import tempfile
+
+    # --- strip kernel-shutdown cells (same markers as CI ci_strip_kernel_shutdown.py) ---
+    SHUTDOWN_MARKERS = ("do_shutdown(True)", "IPython.Application.instance()")
 
     input_nb = os.path.join(work_dir, notebook_name)
     output_nb = os.path.join(work_dir, "pipeline-outputs", notebook_name)
     os.makedirs(os.path.dirname(output_nb), exist_ok=True)
 
+    with open(input_nb, encoding="utf-8") as f:
+        nb = json.load(f)
+
+    original_count = len(nb["cells"])
+    nb["cells"] = [
+        cell for cell in nb["cells"]
+        if not any(marker in "".join(cell.get("source", [])) for marker in SHUTDOWN_MARKERS)
+    ]
+    removed = original_count - len(nb["cells"])
+    if removed:
+        print(f"Stripped {removed} kernel-shutdown cell(s) from {notebook_name}")
+
+    # Write the stripped notebook to a temp file so the original is unchanged
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".ipynb", dir="/tmp", delete=False, encoding="utf-8"
+    ) as tmp:
+        json.dump(nb, tmp, ensure_ascii=False)
+        stripped_nb = tmp.name
+
     # Pipeline step pods run with a restricted SCC that cannot write to
     # /opt/app-root/src/.local (the default pip --user install target).
-    # Set HOME=/tmp so %pip install cells use /tmp/.local instead.
+    # HOME is set to /tmp at the pod level (see _configure_task) but we
+    # also copy it here for clarity and to ensure the subprocess inherits it.
     env = os.environ.copy()
     env["HOME"] = "/tmp"
-    os.makedirs("/tmp/.local", exist_ok=True)
 
     subprocess.run(
         [
             "papermill",
-            input_nb,
+            stripped_nb,
             output_nb,
             "--kernel", "python3",
             "--no-progress-bar",
