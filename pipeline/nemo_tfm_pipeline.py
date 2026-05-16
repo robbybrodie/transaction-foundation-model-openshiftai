@@ -52,9 +52,35 @@ def run_notebook(notebook_name: str, work_dir: str, prev: str = "") -> str:
     import json
     import os
     import subprocess
+    import sys
     import tempfile
 
-    # --- strip kernel-shutdown cells (same markers as CI ci_strip_kernel_shutdown.py) ---
+    # HOME=/tmp is set at the pod level (see _configure_task).  Ensure the
+    # subprocess env inherits it so pip --user and jupyter --user paths all
+    # resolve under /tmp rather than the image default /opt/app-root/src.
+    env = os.environ.copy()
+    env["HOME"] = "/tmp"
+
+    # --- Register the python3 kernel under HOME=/tmp ---
+    # The NeMo image may have registered the python3 kernel spec at the
+    # image-build-time HOME (/opt/app-root/src).  Overriding HOME=/tmp means
+    # that path is no longer the user kernel dir, so papermill cannot find the
+    # kernel.  Register it explicitly into /tmp/.local/share/jupyter/kernels/
+    # to guarantee it is discoverable regardless of where the image built it.
+    subprocess.run(
+        [sys.executable, "-m", "ipykernel", "install",
+         "--user", "--name", "python3", "--display-name", "Python 3"],
+        check=True,
+        env=env,
+    )
+
+    # --- Strip kernel-shutdown cells (identical logic to CI ci_strip_kernel_shutdown.py) ---
+    # Notebooks contain cells like:
+    #   IPython.Application.instance().kernel.do_shutdown(True)
+    # which shut down the Jupyter kernel for interactive use.  Papermill
+    # receives a DeadKernelError when it hits these.  Strip them from a temp
+    # copy before execution; the original notebook on the PVC is unchanged.
+    # CI marker check: strip code cells where BOTH markers appear together.
     SHUTDOWN_MARKERS = ("do_shutdown(True)", "IPython.Application.instance()")
 
     input_nb = os.path.join(work_dir, notebook_name)
@@ -64,28 +90,25 @@ def run_notebook(notebook_name: str, work_dir: str, prev: str = "") -> str:
     with open(input_nb, encoding="utf-8") as f:
         nb = json.load(f)
 
-    original_count = len(nb["cells"])
-    nb["cells"] = [
-        cell for cell in nb["cells"]
-        if not any(marker in "".join(cell.get("source", [])) for marker in SHUTDOWN_MARKERS)
-    ]
-    removed = original_count - len(nb["cells"])
+    kept = []
+    removed = 0
+    for cell in nb["cells"]:
+        if cell.get("cell_type") == "code":
+            src = "".join(cell.get("source", []))
+            if all(marker in src for marker in SHUTDOWN_MARKERS):
+                removed += 1
+                continue
+        kept.append(cell)
+    nb["cells"] = kept
     if removed:
         print(f"Stripped {removed} kernel-shutdown cell(s) from {notebook_name}")
 
-    # Write the stripped notebook to a temp file so the original is unchanged
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".ipynb", dir="/tmp", delete=False, encoding="utf-8"
     ) as tmp:
         json.dump(nb, tmp, ensure_ascii=False)
+        tmp.write("\n")
         stripped_nb = tmp.name
-
-    # Pipeline step pods run with a restricted SCC that cannot write to
-    # /opt/app-root/src/.local (the default pip --user install target).
-    # HOME is set to /tmp at the pod level (see _configure_task) but we
-    # also copy it here for clarity and to ensure the subprocess inherits it.
-    env = os.environ.copy()
-    env["HOME"] = "/tmp"
 
     subprocess.run(
         [
