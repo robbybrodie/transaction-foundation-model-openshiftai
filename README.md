@@ -37,8 +37,25 @@ This developer example shows how to build such a model end-to-end on NVIDIA GPUs
 > This project will download and install additional third-party open source software projects.
 > Please review the license terms of these open source projects before use.
 
+## Running on Red Hat OpenShift AI
+
+This project has been deployed on **Red Hat OpenShift AI (RHOAI)** — a
+managed ML platform with GPU-backed workbenches, pipeline tracking, and
+model serving, running on OpenShift.
+
+| Guide | Who it is for |
+|---|---|
+| [**TUTORIAL.md**](TUTORIAL.md) | Data scientists: how to use the workbench and run the pipeline |
+| [**README-OPENSHIFT.md**](README-OPENSHIFT.md) | Platform engineers: how to deploy and configure the RHOAI stack |
+
+If you have been given a dashboard URL and want to run the notebooks or the
+end-to-end pipeline, start with **[TUTORIAL.md](TUTORIAL.md)**.
+
+---
+
 ## Table of Contents
 
+- [Running on Red Hat OpenShift AI](#running-on-red-hat-openshift-ai)
 - [Quickstart](#quickstart)
   - [Notebooks](#notebooks)
 - [Deployment](#deployment)
