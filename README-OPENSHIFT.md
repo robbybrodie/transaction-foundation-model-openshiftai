@@ -130,6 +130,52 @@ account). This goes into `openshift/secrets/registry-credentials.yaml`.
 
 ---
 
+### Credentials summary
+
+Before running any steps, collect all of the following. The table shows
+where each value comes from and where it is used.
+
+| Credential | Where to get it | Used in |
+|---|---|---|
+| **OpenShift API URL** | Cluster console → top-right menu → "Copy login command" | `oc login`, `cluster-credentials.env` |
+| **OpenShift token** | Same "Copy login command" page (or `oc whoami --show-token` after login) | `oc login`, `cluster-credentials.env` |
+| **Cluster-admin role** | Required for Step 3 (RBAC/SCC) only — not needed for day-to-day use | `oc apply -f openshift/rbac/` |
+| **RHOAI dashboard login** | Same OpenShift username and password — RHOAI uses OpenShift OAuth, no separate account | RHOAI dashboard UI, workbench launch |
+| **NGC API key** | [ngc.nvidia.com](https://ngc.nvidia.com) → free account → API Keys | `openshift/secrets/registry-credentials.yaml` |
+| **S3 access key** | Your AWS IAM console, MinIO admin, or ODF admin | `openshift/secrets/workbench-secret.yaml` |
+| **S3 secret key** | Same as above | `openshift/secrets/workbench-secret.yaml` |
+| **S3 bucket name** | Create a bucket in your S3-compatible store; note the name | `openshift/secrets/workbench-secret.yaml`, `openshift/pipeline/dspa.yaml` |
+| **S3 endpoint** | e.g. `s3.us-west-2.amazonaws.com` (AWS) or your MinIO URL | `openshift/pipeline/dspa.yaml` |
+
+**Getting your OpenShift login token:**
+
+```bash
+# Option A — from the console UI
+# 1. Open the OpenShift console in your browser
+# 2. Click your username (top right) → "Copy login command"
+# 3. Click "Display Token" — copy the oc login ... command
+
+# Option B — if already logged in
+oc whoami --show-token
+
+# Tokens expire (typically 24h). Refresh by repeating the above.
+```
+
+**Generating the NGC pull secret** (required for `registry-credentials.yaml`):
+
+```bash
+NGC_API_KEY=<your-key>
+AUTH=$(echo -n "\$oauthtoken:${NGC_API_KEY}" | base64)
+echo "{\"auths\":{\"nvcr.io\":{\"auth\":\"${AUTH}\"}}}" | base64
+# Paste the output as the .dockerconfigjson value in registry-credentials.yaml
+```
+
+> **Note:** You do NOT need a separate RHOAI account or API key.
+> RHOAI inherits OpenShift's identity provider — log into the dashboard
+> with the same credentials you use for `oc login`.
+
+---
+
 ### Verify your cluster is ready
 
 Run these checks before applying any manifests:
