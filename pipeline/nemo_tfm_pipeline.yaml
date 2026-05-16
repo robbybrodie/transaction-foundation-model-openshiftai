@@ -430,7 +430,8 @@ root:
   dag:
     tasks:
       dataset-baseline:
-        cachingOptions: {}
+        cachingOptions:
+          enableCache: false
         componentRef:
           name: comp-dataset-baseline
         inputs:
@@ -440,7 +441,8 @@ root:
         taskInfo:
           name: dataset-baseline
       foundation-model-training:
-        cachingOptions: {}
+        cachingOptions:
+          enableCache: false
         componentRef:
           name: comp-foundation-model-training
         dependentTasks:
@@ -456,7 +458,8 @@ root:
         taskInfo:
           name: foundation-model-training
       inference-embedding-extraction:
-        cachingOptions: {}
+        cachingOptions:
+          enableCache: false
         componentRef:
           name: comp-inference-embedding-extraction
         dependentTasks:
@@ -472,7 +475,8 @@ root:
         taskInfo:
           name: inference-embedding-extraction
       seq-preproc-tokenization:
-        cachingOptions: {}
+        cachingOptions:
+          enableCache: false
         componentRef:
           name: comp-seq-preproc-tokenization
         dependentTasks:
@@ -488,7 +492,8 @@ root:
         taskInfo:
           name: seq-preproc-tokenization
       xgboost-fraud-detection:
-        cachingOptions: {}
+        cachingOptions:
+          enableCache: false
         componentRef:
           name: comp-xgboost-fraud-detection
         dependentTasks:
