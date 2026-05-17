@@ -1,0 +1,1265 @@
+# PIPELINE DEFINITION
+# Name: nemo-tfm-foundation-model-decorated
+# Description: Decorated KFP v2 pipeline — typed I/O components calling src/ directly. Contrast with nemo-transaction-foundation-model (papermill version).
+# Inputs:
+#    max_steps: int [Default: 30.0]
+#    mode: str [Default: 'demo']
+#    model_path: str [Default: 'models/decoder-foundation-model']
+#    work_dir: str [Default: '/opt/app-root/src/nemo-tfm']
+components:
+  comp-condition-2:
+    dag:
+      tasks:
+        evaluate-fraud-detection:
+          cachingOptions: {}
+          componentRef:
+            name: comp-evaluate-fraud-detection
+          dependentTasks:
+          - extract-embeddings
+          inputs:
+            parameters:
+              embeddings_path:
+                taskOutputParameter:
+                  outputParameterKey: Output
+                  producerTask: extract-embeddings
+              work_dir:
+                componentInputParameter: pipelinechannel--work_dir
+          taskInfo:
+            name: evaluate-fraud-detection
+        extract-embeddings:
+          cachingOptions: {}
+          componentRef:
+            name: comp-extract-embeddings
+          dependentTasks:
+          - train-foundation-model
+          inputs:
+            parameters:
+              model_path:
+                componentInputParameter: pipelinechannel--model_path
+              work_dir:
+                componentInputParameter: pipelinechannel--work_dir
+          taskInfo:
+            name: extract-embeddings
+        train-foundation-model:
+          cachingOptions: {}
+          componentRef:
+            name: comp-train-foundation-model
+          inputs:
+            parameters:
+              corpus_dir:
+                componentInputParameter: pipelinechannel--tokenize-transactions-Output
+              max_steps:
+                componentInputParameter: pipelinechannel--max_steps
+              work_dir:
+                componentInputParameter: pipelinechannel--work_dir
+          taskInfo:
+            name: train-foundation-model
+    inputDefinitions:
+      parameters:
+        pipelinechannel--max_steps:
+          parameterType: NUMBER_INTEGER
+        pipelinechannel--mode:
+          parameterType: STRING
+        pipelinechannel--model_path:
+          parameterType: STRING
+        pipelinechannel--tokenize-transactions-Output:
+          parameterType: STRING
+        pipelinechannel--work_dir:
+          parameterType: STRING
+  comp-condition-3:
+    dag:
+      tasks:
+        evaluate-fraud-detection-2:
+          cachingOptions: {}
+          componentRef:
+            name: comp-evaluate-fraud-detection-2
+          dependentTasks:
+          - extract-embeddings-2
+          inputs:
+            parameters:
+              embeddings_path:
+                taskOutputParameter:
+                  outputParameterKey: Output
+                  producerTask: extract-embeddings-2
+              work_dir:
+                componentInputParameter: pipelinechannel--work_dir
+          taskInfo:
+            name: evaluate-fraud-detection-2
+        extract-embeddings-2:
+          cachingOptions: {}
+          componentRef:
+            name: comp-extract-embeddings-2
+          inputs:
+            parameters:
+              model_path:
+                componentInputParameter: pipelinechannel--model_path
+              work_dir:
+                componentInputParameter: pipelinechannel--work_dir
+          taskInfo:
+            name: extract-embeddings-2
+    inputDefinitions:
+      parameters:
+        pipelinechannel--mode:
+          parameterType: STRING
+        pipelinechannel--model_path:
+          parameterType: STRING
+        pipelinechannel--work_dir:
+          parameterType: STRING
+  comp-condition-branches-1:
+    dag:
+      tasks:
+        condition-2:
+          componentRef:
+            name: comp-condition-2
+          inputs:
+            parameters:
+              pipelinechannel--max_steps:
+                componentInputParameter: pipelinechannel--max_steps
+              pipelinechannel--mode:
+                componentInputParameter: pipelinechannel--mode
+              pipelinechannel--model_path:
+                componentInputParameter: pipelinechannel--model_path
+              pipelinechannel--tokenize-transactions-Output:
+                componentInputParameter: pipelinechannel--tokenize-transactions-Output
+              pipelinechannel--work_dir:
+                componentInputParameter: pipelinechannel--work_dir
+          taskInfo:
+            name: train-mode
+          triggerPolicy:
+            condition: inputs.parameter_values['pipelinechannel--mode'] == 'train'
+        condition-3:
+          componentRef:
+            name: comp-condition-3
+          inputs:
+            parameters:
+              pipelinechannel--mode:
+                componentInputParameter: pipelinechannel--mode
+              pipelinechannel--model_path:
+                componentInputParameter: pipelinechannel--model_path
+              pipelinechannel--work_dir:
+                componentInputParameter: pipelinechannel--work_dir
+          taskInfo:
+            name: demo-mode
+          triggerPolicy:
+            condition: '!(inputs.parameter_values[''pipelinechannel--mode''] == ''train'')'
+    inputDefinitions:
+      parameters:
+        pipelinechannel--max_steps:
+          parameterType: NUMBER_INTEGER
+        pipelinechannel--mode:
+          parameterType: STRING
+        pipelinechannel--model_path:
+          parameterType: STRING
+        pipelinechannel--tokenize-transactions-Output:
+          parameterType: STRING
+        pipelinechannel--work_dir:
+          parameterType: STRING
+  comp-evaluate-fraud-detection:
+    executorLabel: exec-evaluate-fraud-detection
+    inputDefinitions:
+      parameters:
+        embeddings_path:
+          parameterType: STRING
+        work_dir:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        metrics:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+      parameters:
+        Output:
+          parameterType: NUMBER_DOUBLE
+  comp-evaluate-fraud-detection-2:
+    executorLabel: exec-evaluate-fraud-detection-2
+    inputDefinitions:
+      parameters:
+        embeddings_path:
+          parameterType: STRING
+        work_dir:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        metrics:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+      parameters:
+        Output:
+          parameterType: NUMBER_DOUBLE
+  comp-extract-embeddings:
+    executorLabel: exec-extract-embeddings
+    inputDefinitions:
+      parameters:
+        model_path:
+          defaultValue: models/decoder-foundation-model
+          description: "Default: models/decoder-foundation-model/ (Git LFS,\n3000-step\
+            \ NVIDIA checkpoint). In both demo and train\nmodes this default is used\
+            \ \u2014 training output is separate."
+          isOptional: true
+          parameterType: STRING
+        work_dir:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-extract-embeddings-2:
+    executorLabel: exec-extract-embeddings-2
+    inputDefinitions:
+      parameters:
+        model_path:
+          defaultValue: models/decoder-foundation-model
+          description: "Default: models/decoder-foundation-model/ (Git LFS,\n3000-step\
+            \ NVIDIA checkpoint). In both demo and train\nmodes this default is used\
+            \ \u2014 training output is separate."
+          isOptional: true
+          parameterType: STRING
+        work_dir:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-tokenize-transactions:
+    executorLabel: exec-tokenize-transactions
+    inputDefinitions:
+      parameters:
+        work_dir:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-train-foundation-model:
+    executorLabel: exec-train-foundation-model
+    inputDefinitions:
+      parameters:
+        config_path:
+          defaultValue: configs/pretrain_financial_decoder.yaml
+          isOptional: true
+          parameterType: STRING
+        corpus_dir:
+          parameterType: STRING
+        max_steps:
+          defaultValue: 30.0
+          isOptional: true
+          parameterType: NUMBER_INTEGER
+        work_dir:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+deploymentSpec:
+  executors:
+    exec-evaluate-fraud-detection:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - evaluate_fraud_detection
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.13.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef evaluate_fraud_detection(\n    work_dir:        str,\n    embeddings_path:\
+          \ str,\n    metrics:         Output[Metrics],\n) -> float:\n    \"\"\"XGBoost\
+          \ fraud detection: raw features vs. foundation model embeddings.\n\n   \
+          \ True decorated component \u2014 calls src/ directly. CPU only (no GPU).\n\
+          \    Contrast with nemo_tfm_pipeline.py which uses papermill to run the\n\
+          \    equivalent notebook (05_xgboost_fraud_detection.ipynb).\n\n    Loads\
+          \ pre-extracted embeddings and raw tabular features, reduces 512d\n    embeddings\
+          \ to 64d via PCA, then trains two HPO-optimized XGBoost models:\n      1.\
+          \ Baseline: raw tabular features only  (13 fields, OrdinalEncoded)\n   \
+          \   2. Embeddings: 64d PCA from 512d decoder embeddings\n\n    Logs three\
+          \ structured metrics to the KFP metadata store:\n      - auc_raw_features:\
+          \ test ROC-AUC for the raw feature baseline\n      - auc_embeddings:   test\
+          \ ROC-AUC for the embedding model\n      - lift_pct:         relative improvement\
+          \ (the headline demo number)\n\n    These metrics appear in the OpenShift\
+          \ AI pipeline dashboard metrics tab \u2014\n    that is the screenshot that\
+          \ closes Demonstration 3 (\"The model accuracy\n    improvement is real\"\
+          ). Pointing at lift_pct and saying \"this is the\n    improvement\" is only\
+          \ credible because the KFP metadata store records\n    exactly what ran,\
+          \ on what data, with what parameters, at what time.\n    APRA CPG 220 requires\
+          \ the latter.\n\n    Better than papermill: both AUC values are structured\
+          \ metrics queryable\n    across runs, comparable across versions, and visible\
+          \ in the dashboard\n    without opening the notebook. The papermill version\
+          \ prints to a cell.\n\n    Parameters\n    ----------\n    work_dir    \
+          \    : str            \u2014 repo root on the shared PVC\n    embeddings_path\
+          \ : str            \u2014 path returned by extract_embeddings\n    metrics\
+          \         : Output[Metrics] \u2014 KFP-injected metrics sink\n\n    Returns\n\
+          \    -------\n    float\n        Test ROC-AUC for the embedding model (the\
+          \ headline accuracy number).\n    \"\"\"\n    import os\n    import sys\n\
+          \    import json\n\n    import numpy as np\n    from sklearn.decomposition\
+          \ import PCA\n    from sklearn.metrics import roc_auc_score\n    from sklearn.preprocessing\
+          \ import OrdinalEncoder\n    from sklearn.compose import make_column_transformer,\
+          \ make_column_selector\n    import xgboost as xgb\n    import cudf\n\n \
+          \   # True decorated component \u2014 calls src/ directly.\n    sys.path.insert(0,\
+          \ work_dir)\n    os.environ[\"HOME\"] = \"/tmp\"\n\n    embed_dir    = embeddings_path\
+          \ if os.path.isabs(embeddings_path) else os.path.join(work_dir, embeddings_path)\n\
+          \    temporal_dir = os.path.join(work_dir, \"data\", \"TabFormer\", \"temporal_split\"\
+          )\n\n    # ------------------------------------------------------------------\n\
+          \    # Load embeddings + labels + row IDs\n    # ------------------------------------------------------------------\n\
+          \    print(\"Loading embeddings...\")\n    X_train_embed_raw = np.load(os.path.join(embed_dir,\
+          \ \"train_embeddings.npy\"))\n    y_train           = np.load(os.path.join(embed_dir,\
+          \ \"train_labels.npy\"))\n    train_row_ids     = np.load(os.path.join(embed_dir,\
+          \ \"train_row_ids.npy\"))\n    X_val_embed_raw   = np.load(os.path.join(embed_dir,\
+          \ \"val_embeddings.npy\"))\n    y_val             = np.load(os.path.join(embed_dir,\
+          \ \"val_labels.npy\"))\n    val_row_ids       = np.load(os.path.join(embed_dir,\
+          \ \"val_row_ids.npy\"))\n    X_test_embed_raw  = np.load(os.path.join(embed_dir,\
+          \ \"test_embeddings.npy\"))\n    y_test            = np.load(os.path.join(embed_dir,\
+          \ \"test_labels.npy\"))\n    test_row_ids      = np.load(os.path.join(embed_dir,\
+          \ \"test_row_ids.npy\"))\n\n    n_train       = len(X_train_embed_raw)\n\
+          \    embed_dim_orig = X_train_embed_raw.shape[1]\n    print(f\"Embeddings:\
+          \ train={n_train:,}, val={len(X_val_embed_raw):,}, \"\n          f\"test={len(X_test_embed_raw):,},\
+          \ dim={embed_dim_orig}\")\n\n    # ------------------------------------------------------------------\n\
+          \    # PCA: 512d \u2192 64d\n    # ------------------------------------------------------------------\n\
+          \    PCA_DIM = 64\n    print(f\"PCA: {embed_dim_orig}d \u2192 {PCA_DIM}d\"\
+          )\n    pca = PCA(n_components=PCA_DIM, random_state=42)\n    X_train_embed_pca\
+          \ = pca.fit_transform(X_train_embed_raw)\n    X_val_embed_pca   = pca.transform(X_val_embed_raw)\n\
+          \    X_test_embed_pca  = pca.transform(X_test_embed_raw)\n    print(f\"\
+          \  Explained variance: {pca.explained_variance_ratio_.sum():.2%}\")\n\n\
+          \    # ------------------------------------------------------------------\n\
+          \    # Load and align raw tabular features (GPU-accelerated via cuDF)\n\
+          \    # ------------------------------------------------------------------\n\
+          \    FEATURE_COLS   = [\n        \"User\", \"Card\", \"Year\", \"Month\"\
+          , \"Day\", \"Hour\", \"Amount\",\n        \"Use Chip\", \"Merchant Name\"\
+          , \"Merchant City\", \"Merchant State\",\n        \"Zip\", \"MCC\",\n  \
+          \  ]\n    FRAUD_COL      = \"Is Fraud?\"\n    BALANCED_TOTAL = n_train\n\
+          \n    print(\"Loading raw features (cuDF)...\")\n    train_gdf = cudf.read_parquet(os.path.join(temporal_dir,\
+          \ \"train.parquet\"))\n    val_gdf   = cudf.read_parquet(os.path.join(temporal_dir,\
+          \ \"val_eval.parquet\"))\n    test_gdf  = cudf.read_parquet(os.path.join(temporal_dir,\
+          \ \"test_eval.parquet\"))\n\n    for gdf in (train_gdf, val_gdf, test_gdf):\n\
+          \        gdf[\"Hour\"]   = gdf[\"Time\"].str.split(\":\", n=1, expand=True)[0].astype(int)\n\
+          \        gdf[\"Amount\"] = (\n            gdf[\"Amount\"].str.replace(\"\
+          $\", \"\", regex=False)\n                          .str.replace(\",\", \"\
+          \").astype(float)\n        )\n\n    train_pdf = train_gdf.to_pandas()\n\
+          \    val_pdf   = val_gdf.to_pandas()\n    test_pdf  = test_gdf.to_pandas()\n\
+          \    del train_gdf, val_gdf, test_gdf\n\n    # Recreate balanced sample\
+          \ indices \u2014 must match extract_embeddings (seed=42)\n    fraud_mask\
+          \    = (train_pdf[FRAUD_COL] == \"Yes\") | (train_pdf[FRAUD_COL] == \"1\"\
+          )\n    fraud_idx     = train_pdf.index[fraud_mask].tolist()\n    normal_idx\
+          \    = train_pdf.index[~fraud_mask].tolist()\n    np.random.seed(42)\n \
+          \   n_fraud_tgt   = min(len(fraud_idx),  int(BALANCED_TOTAL * 0.1))\n  \
+          \  n_normal_tgt  = min(len(normal_idx), BALANCED_TOTAL - n_fraud_tgt)\n\
+          \    sampled_fraud  = np.random.choice(fraud_idx,  n_fraud_tgt,  replace=False)\n\
+          \    sampled_normal = np.random.choice(normal_idx, n_normal_tgt, replace=False)\n\
+          \    balanced_idx   = np.concatenate([sampled_fraud, sampled_normal])\n\
+          \    np.random.shuffle(balanced_idx)\n\n    X_train_raw = (\n        train_pdf.loc[balanced_idx,\
+          \ FEATURE_COLS]\n        .reset_index(drop=True).iloc[train_row_ids].reset_index(drop=True)\n\
+          \    )\n    X_val_raw  = val_pdf.iloc[val_row_ids][FEATURE_COLS].reset_index(drop=True)\n\
+          \    X_test_raw = test_pdf.iloc[test_row_ids][FEATURE_COLS].reset_index(drop=True)\n\
+          \n    preprocessor = make_column_transformer(\n        (\n            OrdinalEncoder(handle_unknown=\"\
+          use_encoded_value\", unknown_value=-1),\n            make_column_selector(dtype_include=[\"\
+          object\", \"category\"]),\n        ),\n        remainder=\"passthrough\"\
+          ,\n    )\n    X_train_enc = preprocessor.fit_transform(X_train_raw)\n  \
+          \  X_val_enc   = preprocessor.transform(X_val_raw)\n    X_test_enc  = preprocessor.transform(X_test_raw)\n\
+          \    print(f\"Raw features encoded: {X_train_enc.shape[1]}d\")\n\n    #\
+          \ ------------------------------------------------------------------\n \
+          \   # Train XGBoost models (HPO-optimized params from notebook 05)\n   \
+          \ # ------------------------------------------------------------------\n\
+          \    import torch\n    XGB_DEVICE = \"cuda\" if torch.cuda.is_available()\
+          \ else \"cpu\"\n\n    # Hyperparameters from Optuna tuning in notebook 05\n\
+          \    XGB_PARAMS_RAW = {\n        \"n_estimators\": 400, \"max_depth\": 8,\
+          \ \"learning_rate\": 0.0023,\n        \"colsample_bytree\": 0.95, \"min_child_weight\"\
+          : 12, \"subsample\": 0.673,\n        \"reg_alpha\": 0.01, \"reg_lambda\"\
+          : 0.001, \"random_state\": 42,\n    }\n    XGB_PARAMS_EMBED = {\n      \
+          \  \"n_estimators\": 435, \"max_depth\": 12, \"learning_rate\": 0.03774,\n\
+          \        \"colsample_bytree\": 0.587, \"min_child_weight\": 2.61, \"subsample\"\
+          : 0.569,\n        \"reg_alpha\": 0.01364, \"reg_lambda\": 9.7e-05, \"gamma\"\
+          : 1.7, \"random_state\": 42,\n    }\n\n    def _train_xgb(X_tr, y_tr, X_v,\
+          \ y_v, X_te, y_te, params, name):\n        clf = xgb.XGBClassifier(\n  \
+          \          **params,\n            tree_method=\"hist\",\n            device=XGB_DEVICE,\n\
+          \            early_stopping_rounds=20,\n            eval_metric=\"auc\"\
+          ,\n        )\n        clf.fit(X_tr, y_tr, eval_set=[(X_v, y_v)], verbose=False)\n\
+          \        test_auc = roc_auc_score(y_te, clf.predict_proba(X_te)[:, 1])\n\
+          \        print(f\"  {name}: test ROC-AUC = {test_auc:.4f}\")\n        return\
+          \ float(test_auc)\n\n    print(\"\\nTraining baseline (raw features)...\"\
+          )\n    baseline_auc = _train_xgb(\n        X_train_enc, y_train, X_val_enc,\
+          \ y_val, X_test_enc, y_test,\n        XGB_PARAMS_RAW, f\"Raw features ({X_train_enc.shape[1]}d)\"\
+          ,\n    )\n\n    print(\"Training embeddings model (PCA 64d)...\")\n    embedding_auc\
+          \ = _train_xgb(\n        X_train_embed_pca, y_train, X_val_embed_pca, y_val,\
+          \ X_test_embed_pca, y_test,\n        XGB_PARAMS_EMBED, \"Embeddings (PCA\
+          \ 64d)\",\n    )\n\n    lift_pct = (embedding_auc / baseline_auc - 1) *\
+          \ 100\n\n    # ------------------------------------------------------------------\n\
+          \    # Log structured metrics to KFP metadata store.\n    # These appear\
+          \ in the RHOAI pipeline dashboard metrics tab.\n    # lift_pct is the headline\
+          \ number for Demonstration 3.\n    # ------------------------------------------------------------------\n\
+          \    metrics.log_metric(\"auc_raw_features\", round(baseline_auc, 4))\n\
+          \    metrics.log_metric(\"auc_embeddings\",   round(embedding_auc, 4))\n\
+          \    metrics.log_metric(\"lift_pct\",         round(lift_pct, 2))\n\n  \
+          \  print(f\"\\n{'='*50}\")\n    print(f\"RESULTS (logged to KFP metadata\
+          \ store)\")\n    print(f\"{'='*50}\")\n    print(f\"  auc_raw_features :\
+          \ {baseline_auc:.4f}\")\n    print(f\"  auc_embeddings   : {embedding_auc:.4f}\"\
+          )\n    print(f\"  lift_pct         : {lift_pct:+.2f}%\")\n    print(f\"\\\
+          nThese metrics appear in the RHOAI dashboard \u2192 Runs \u2192 Metrics\
+          \ tab.\")\n\n    return embedding_auc\n\n"
+        env:
+        - name: HOME
+          value: /tmp
+        image: image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest
+        resources:
+          cpuRequest: 4.0
+          memoryRequest: 16.0
+          resourceCpuRequest: '4'
+          resourceMemoryRequest: 16G
+    exec-evaluate-fraud-detection-2:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - evaluate_fraud_detection
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.13.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef evaluate_fraud_detection(\n    work_dir:        str,\n    embeddings_path:\
+          \ str,\n    metrics:         Output[Metrics],\n) -> float:\n    \"\"\"XGBoost\
+          \ fraud detection: raw features vs. foundation model embeddings.\n\n   \
+          \ True decorated component \u2014 calls src/ directly. CPU only (no GPU).\n\
+          \    Contrast with nemo_tfm_pipeline.py which uses papermill to run the\n\
+          \    equivalent notebook (05_xgboost_fraud_detection.ipynb).\n\n    Loads\
+          \ pre-extracted embeddings and raw tabular features, reduces 512d\n    embeddings\
+          \ to 64d via PCA, then trains two HPO-optimized XGBoost models:\n      1.\
+          \ Baseline: raw tabular features only  (13 fields, OrdinalEncoded)\n   \
+          \   2. Embeddings: 64d PCA from 512d decoder embeddings\n\n    Logs three\
+          \ structured metrics to the KFP metadata store:\n      - auc_raw_features:\
+          \ test ROC-AUC for the raw feature baseline\n      - auc_embeddings:   test\
+          \ ROC-AUC for the embedding model\n      - lift_pct:         relative improvement\
+          \ (the headline demo number)\n\n    These metrics appear in the OpenShift\
+          \ AI pipeline dashboard metrics tab \u2014\n    that is the screenshot that\
+          \ closes Demonstration 3 (\"The model accuracy\n    improvement is real\"\
+          ). Pointing at lift_pct and saying \"this is the\n    improvement\" is only\
+          \ credible because the KFP metadata store records\n    exactly what ran,\
+          \ on what data, with what parameters, at what time.\n    APRA CPG 220 requires\
+          \ the latter.\n\n    Better than papermill: both AUC values are structured\
+          \ metrics queryable\n    across runs, comparable across versions, and visible\
+          \ in the dashboard\n    without opening the notebook. The papermill version\
+          \ prints to a cell.\n\n    Parameters\n    ----------\n    work_dir    \
+          \    : str            \u2014 repo root on the shared PVC\n    embeddings_path\
+          \ : str            \u2014 path returned by extract_embeddings\n    metrics\
+          \         : Output[Metrics] \u2014 KFP-injected metrics sink\n\n    Returns\n\
+          \    -------\n    float\n        Test ROC-AUC for the embedding model (the\
+          \ headline accuracy number).\n    \"\"\"\n    import os\n    import sys\n\
+          \    import json\n\n    import numpy as np\n    from sklearn.decomposition\
+          \ import PCA\n    from sklearn.metrics import roc_auc_score\n    from sklearn.preprocessing\
+          \ import OrdinalEncoder\n    from sklearn.compose import make_column_transformer,\
+          \ make_column_selector\n    import xgboost as xgb\n    import cudf\n\n \
+          \   # True decorated component \u2014 calls src/ directly.\n    sys.path.insert(0,\
+          \ work_dir)\n    os.environ[\"HOME\"] = \"/tmp\"\n\n    embed_dir    = embeddings_path\
+          \ if os.path.isabs(embeddings_path) else os.path.join(work_dir, embeddings_path)\n\
+          \    temporal_dir = os.path.join(work_dir, \"data\", \"TabFormer\", \"temporal_split\"\
+          )\n\n    # ------------------------------------------------------------------\n\
+          \    # Load embeddings + labels + row IDs\n    # ------------------------------------------------------------------\n\
+          \    print(\"Loading embeddings...\")\n    X_train_embed_raw = np.load(os.path.join(embed_dir,\
+          \ \"train_embeddings.npy\"))\n    y_train           = np.load(os.path.join(embed_dir,\
+          \ \"train_labels.npy\"))\n    train_row_ids     = np.load(os.path.join(embed_dir,\
+          \ \"train_row_ids.npy\"))\n    X_val_embed_raw   = np.load(os.path.join(embed_dir,\
+          \ \"val_embeddings.npy\"))\n    y_val             = np.load(os.path.join(embed_dir,\
+          \ \"val_labels.npy\"))\n    val_row_ids       = np.load(os.path.join(embed_dir,\
+          \ \"val_row_ids.npy\"))\n    X_test_embed_raw  = np.load(os.path.join(embed_dir,\
+          \ \"test_embeddings.npy\"))\n    y_test            = np.load(os.path.join(embed_dir,\
+          \ \"test_labels.npy\"))\n    test_row_ids      = np.load(os.path.join(embed_dir,\
+          \ \"test_row_ids.npy\"))\n\n    n_train       = len(X_train_embed_raw)\n\
+          \    embed_dim_orig = X_train_embed_raw.shape[1]\n    print(f\"Embeddings:\
+          \ train={n_train:,}, val={len(X_val_embed_raw):,}, \"\n          f\"test={len(X_test_embed_raw):,},\
+          \ dim={embed_dim_orig}\")\n\n    # ------------------------------------------------------------------\n\
+          \    # PCA: 512d \u2192 64d\n    # ------------------------------------------------------------------\n\
+          \    PCA_DIM = 64\n    print(f\"PCA: {embed_dim_orig}d \u2192 {PCA_DIM}d\"\
+          )\n    pca = PCA(n_components=PCA_DIM, random_state=42)\n    X_train_embed_pca\
+          \ = pca.fit_transform(X_train_embed_raw)\n    X_val_embed_pca   = pca.transform(X_val_embed_raw)\n\
+          \    X_test_embed_pca  = pca.transform(X_test_embed_raw)\n    print(f\"\
+          \  Explained variance: {pca.explained_variance_ratio_.sum():.2%}\")\n\n\
+          \    # ------------------------------------------------------------------\n\
+          \    # Load and align raw tabular features (GPU-accelerated via cuDF)\n\
+          \    # ------------------------------------------------------------------\n\
+          \    FEATURE_COLS   = [\n        \"User\", \"Card\", \"Year\", \"Month\"\
+          , \"Day\", \"Hour\", \"Amount\",\n        \"Use Chip\", \"Merchant Name\"\
+          , \"Merchant City\", \"Merchant State\",\n        \"Zip\", \"MCC\",\n  \
+          \  ]\n    FRAUD_COL      = \"Is Fraud?\"\n    BALANCED_TOTAL = n_train\n\
+          \n    print(\"Loading raw features (cuDF)...\")\n    train_gdf = cudf.read_parquet(os.path.join(temporal_dir,\
+          \ \"train.parquet\"))\n    val_gdf   = cudf.read_parquet(os.path.join(temporal_dir,\
+          \ \"val_eval.parquet\"))\n    test_gdf  = cudf.read_parquet(os.path.join(temporal_dir,\
+          \ \"test_eval.parquet\"))\n\n    for gdf in (train_gdf, val_gdf, test_gdf):\n\
+          \        gdf[\"Hour\"]   = gdf[\"Time\"].str.split(\":\", n=1, expand=True)[0].astype(int)\n\
+          \        gdf[\"Amount\"] = (\n            gdf[\"Amount\"].str.replace(\"\
+          $\", \"\", regex=False)\n                          .str.replace(\",\", \"\
+          \").astype(float)\n        )\n\n    train_pdf = train_gdf.to_pandas()\n\
+          \    val_pdf   = val_gdf.to_pandas()\n    test_pdf  = test_gdf.to_pandas()\n\
+          \    del train_gdf, val_gdf, test_gdf\n\n    # Recreate balanced sample\
+          \ indices \u2014 must match extract_embeddings (seed=42)\n    fraud_mask\
+          \    = (train_pdf[FRAUD_COL] == \"Yes\") | (train_pdf[FRAUD_COL] == \"1\"\
+          )\n    fraud_idx     = train_pdf.index[fraud_mask].tolist()\n    normal_idx\
+          \    = train_pdf.index[~fraud_mask].tolist()\n    np.random.seed(42)\n \
+          \   n_fraud_tgt   = min(len(fraud_idx),  int(BALANCED_TOTAL * 0.1))\n  \
+          \  n_normal_tgt  = min(len(normal_idx), BALANCED_TOTAL - n_fraud_tgt)\n\
+          \    sampled_fraud  = np.random.choice(fraud_idx,  n_fraud_tgt,  replace=False)\n\
+          \    sampled_normal = np.random.choice(normal_idx, n_normal_tgt, replace=False)\n\
+          \    balanced_idx   = np.concatenate([sampled_fraud, sampled_normal])\n\
+          \    np.random.shuffle(balanced_idx)\n\n    X_train_raw = (\n        train_pdf.loc[balanced_idx,\
+          \ FEATURE_COLS]\n        .reset_index(drop=True).iloc[train_row_ids].reset_index(drop=True)\n\
+          \    )\n    X_val_raw  = val_pdf.iloc[val_row_ids][FEATURE_COLS].reset_index(drop=True)\n\
+          \    X_test_raw = test_pdf.iloc[test_row_ids][FEATURE_COLS].reset_index(drop=True)\n\
+          \n    preprocessor = make_column_transformer(\n        (\n            OrdinalEncoder(handle_unknown=\"\
+          use_encoded_value\", unknown_value=-1),\n            make_column_selector(dtype_include=[\"\
+          object\", \"category\"]),\n        ),\n        remainder=\"passthrough\"\
+          ,\n    )\n    X_train_enc = preprocessor.fit_transform(X_train_raw)\n  \
+          \  X_val_enc   = preprocessor.transform(X_val_raw)\n    X_test_enc  = preprocessor.transform(X_test_raw)\n\
+          \    print(f\"Raw features encoded: {X_train_enc.shape[1]}d\")\n\n    #\
+          \ ------------------------------------------------------------------\n \
+          \   # Train XGBoost models (HPO-optimized params from notebook 05)\n   \
+          \ # ------------------------------------------------------------------\n\
+          \    import torch\n    XGB_DEVICE = \"cuda\" if torch.cuda.is_available()\
+          \ else \"cpu\"\n\n    # Hyperparameters from Optuna tuning in notebook 05\n\
+          \    XGB_PARAMS_RAW = {\n        \"n_estimators\": 400, \"max_depth\": 8,\
+          \ \"learning_rate\": 0.0023,\n        \"colsample_bytree\": 0.95, \"min_child_weight\"\
+          : 12, \"subsample\": 0.673,\n        \"reg_alpha\": 0.01, \"reg_lambda\"\
+          : 0.001, \"random_state\": 42,\n    }\n    XGB_PARAMS_EMBED = {\n      \
+          \  \"n_estimators\": 435, \"max_depth\": 12, \"learning_rate\": 0.03774,\n\
+          \        \"colsample_bytree\": 0.587, \"min_child_weight\": 2.61, \"subsample\"\
+          : 0.569,\n        \"reg_alpha\": 0.01364, \"reg_lambda\": 9.7e-05, \"gamma\"\
+          : 1.7, \"random_state\": 42,\n    }\n\n    def _train_xgb(X_tr, y_tr, X_v,\
+          \ y_v, X_te, y_te, params, name):\n        clf = xgb.XGBClassifier(\n  \
+          \          **params,\n            tree_method=\"hist\",\n            device=XGB_DEVICE,\n\
+          \            early_stopping_rounds=20,\n            eval_metric=\"auc\"\
+          ,\n        )\n        clf.fit(X_tr, y_tr, eval_set=[(X_v, y_v)], verbose=False)\n\
+          \        test_auc = roc_auc_score(y_te, clf.predict_proba(X_te)[:, 1])\n\
+          \        print(f\"  {name}: test ROC-AUC = {test_auc:.4f}\")\n        return\
+          \ float(test_auc)\n\n    print(\"\\nTraining baseline (raw features)...\"\
+          )\n    baseline_auc = _train_xgb(\n        X_train_enc, y_train, X_val_enc,\
+          \ y_val, X_test_enc, y_test,\n        XGB_PARAMS_RAW, f\"Raw features ({X_train_enc.shape[1]}d)\"\
+          ,\n    )\n\n    print(\"Training embeddings model (PCA 64d)...\")\n    embedding_auc\
+          \ = _train_xgb(\n        X_train_embed_pca, y_train, X_val_embed_pca, y_val,\
+          \ X_test_embed_pca, y_test,\n        XGB_PARAMS_EMBED, \"Embeddings (PCA\
+          \ 64d)\",\n    )\n\n    lift_pct = (embedding_auc / baseline_auc - 1) *\
+          \ 100\n\n    # ------------------------------------------------------------------\n\
+          \    # Log structured metrics to KFP metadata store.\n    # These appear\
+          \ in the RHOAI pipeline dashboard metrics tab.\n    # lift_pct is the headline\
+          \ number for Demonstration 3.\n    # ------------------------------------------------------------------\n\
+          \    metrics.log_metric(\"auc_raw_features\", round(baseline_auc, 4))\n\
+          \    metrics.log_metric(\"auc_embeddings\",   round(embedding_auc, 4))\n\
+          \    metrics.log_metric(\"lift_pct\",         round(lift_pct, 2))\n\n  \
+          \  print(f\"\\n{'='*50}\")\n    print(f\"RESULTS (logged to KFP metadata\
+          \ store)\")\n    print(f\"{'='*50}\")\n    print(f\"  auc_raw_features :\
+          \ {baseline_auc:.4f}\")\n    print(f\"  auc_embeddings   : {embedding_auc:.4f}\"\
+          )\n    print(f\"  lift_pct         : {lift_pct:+.2f}%\")\n    print(f\"\\\
+          nThese metrics appear in the RHOAI dashboard \u2192 Runs \u2192 Metrics\
+          \ tab.\")\n\n    return embedding_auc\n\n"
+        env:
+        - name: HOME
+          value: /tmp
+        image: image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest
+        resources:
+          cpuRequest: 4.0
+          memoryRequest: 16.0
+          resourceCpuRequest: '4'
+          resourceMemoryRequest: 16G
+    exec-extract-embeddings:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - extract_embeddings
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.13.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef extract_embeddings(\n    work_dir:   str,\n    model_path: str\
+          \ = \"models/decoder-foundation-model\",\n) -> str:\n    \"\"\"Extract 512-d\
+          \ last-token embeddings from the decoder model.\n\n    True decorated component\
+          \ \u2014 calls src/ directly.\n    Contrast with nemo_tfm_pipeline.py which\
+          \ uses papermill to run the\n    equivalent notebook (04_inference_embedding_extraction.ipynb).\n\
+          \n    Runs GPU-accelerated cuDF tokenisation + HuggingFaceDecoderInference\n\
+          \    batch inference for all three splits:\n      - train:  balanced ~1M\
+          \ sample (10% fraud, seed=42, matching notebook 05)\n      - val:    100K\
+          \ stratified subset from val_eval.parquet\n      - test:   100K stratified\
+          \ subset from test_eval.parquet\n\n    Row IDs are preserved before preprocess()\
+          \ sorts by user/card/time, so\n    raw feature alignment in evaluate_fraud_detection\
+          \ is exact.\n\n    LFS smudge logic: if models/decoder-foundation-model/\
+          \ contains pointer\n    files (133-byte git-lfs stubs rather than real safetensors),\
+          \ the real\n    blobs are fetched from GitHub LFS automatically before inference.\
+          \ This\n    logic is copied verbatim from inference_embedding_extraction\
+          \ in\n    nemo_tfm_pipeline.py so behaviour is identical in both pipelines.\n\
+          \n    Better than papermill: model_path is an explicit typed input \u2014\
+          \ if you\n    evaluate a different checkpoint the decision is recorded in\
+          \ the run's\n    lineage. The papermill version buries the model path in\
+          \ a notebook cell.\n\n    Parameters\n    ----------\n    work_dir   : str\
+          \ \u2014 repo root on the shared PVC\n    model_path : str \u2014 relative\
+          \ or absolute path to the model checkpoint.\n                       Default:\
+          \ models/decoder-foundation-model/ (Git LFS,\n                       3000-step\
+          \ NVIDIA checkpoint). In both demo and train\n                       modes\
+          \ this default is used \u2014 training output is separate.\n\n    Returns\n\
+          \    -------\n    str\n        Absolute path to data/embeddings/ on the\
+          \ shared PVC.\n    \"\"\"\n    import glob\n    import json\n    import\
+          \ os\n    import sys\n    import subprocess\n    import time\n\n    import\
+          \ numpy as np\n\n    # True decorated component \u2014 calls src/ directly.\n\
+          \    sys.path.insert(0, work_dir)\n    os.environ[\"HOME\"] = \"/tmp\"\n\
+          \n    # Resolve model_path relative to work_dir if not absolute\n    if\
+          \ not os.path.isabs(model_path):\n        model_path = os.path.join(work_dir,\
+          \ model_path)\n\n    # ------------------------------------------------------------------\n\
+          \    # LFS smudge: detect pointer files and download real safetensors blobs.\n\
+          \    # Copied verbatim from inference_embedding_extraction in nemo_tfm_pipeline.py\n\
+          \    # \u2014 behaviour is identical in both pipelines. Do not modify independently.\n\
+          \    # ------------------------------------------------------------------\n\
+          \    LFS_REPO = (\n        \"https://github.com/robbybrodie/\"\n       \
+          \ \"transaction-foundation-model-openshiftai.git\"\n    )\n    for model_file\
+          \ in glob.glob(os.path.join(model_path, \"*.safetensors\")):\n        with\
+          \ open(model_file, \"rb\") as _f:\n            header = _f.read(50)\n  \
+          \      if not header.startswith(b\"version https://git-lfs\"):\n       \
+          \     continue\n        with open(model_file, encoding=\"utf-8\") as _f:\n\
+          \            pointer_text = _f.read()\n        oid = next(\n           \
+          \ line.split(\"sha256:\")[1].strip()\n            for line in pointer_text.splitlines()\n\
+          \            if line.startswith(\"oid \")\n        )\n        size = int(next(\n\
+          \            line.split()[1]\n            for line in pointer_text.splitlines()\n\
+          \            if line.startswith(\"size \")\n        ))\n        print(\n\
+          \            f\"LFS pointer detected: {os.path.basename(model_file)} \"\n\
+          \            f\"({size:,} bytes). Fetching real blob...\"\n        )\n \
+          \       batch_body = json.dumps({\n            \"operation\": \"download\"\
+          ,\n            \"transfers\": [\"basic\"],\n            \"objects\": [{\"\
+          oid\": oid, \"size\": size}],\n        })\n        batch_result = subprocess.run(\n\
+          \            [\n                \"curl\", \"-s\", \"-X\", \"POST\",\n  \
+          \              \"-H\", \"Content-Type: application/vnd.git-lfs+json\",\n\
+          \                \"-H\", \"Accept: application/vnd.git-lfs+json\",\n   \
+          \             f\"{LFS_REPO}/info/lfs/objects/batch\",\n                \"\
+          -d\", batch_body,\n            ],\n            capture_output=True, text=True,\
+          \ check=True,\n        )\n        batch_resp = json.loads(batch_result.stdout)\n\
+          \        download_url = batch_resp[\"objects\"][0][\"actions\"][\"download\"\
+          ][\"href\"]\n        print(f\"Downloading {os.path.basename(model_file)}...\"\
+          )\n        subprocess.run([\"curl\", \"-L\", \"-o\", model_file, download_url],\
+          \ check=True)\n        print(f\"Smudged: {os.path.basename(model_file)}\
+          \ = {os.path.getsize(model_file):,} bytes\")\n\n    # ------------------------------------------------------------------\n\
+          \    # Initialise tokeniser and model\n    # ------------------------------------------------------------------\n\
+          \    import cudf\n    from src.tokenizer import FinancialTokenizerPipeline,\
+          \ FinancialTabularTokenizer\n    from src.decoder_inference import HuggingFaceDecoderInference\n\
+          \n    BATCH_SIZE          = 1024\n    MAX_LENGTH          = 128\n    MERCHANT_HASH_SIZE\
+          \  = 2000\n    BALANCED_TRAIN_SIZE = 1_000_000\n\n    tokenizer = FinancialTabularTokenizer(\n\
+          \        merchant_hash_size=MERCHANT_HASH_SIZE,\n        category_hierarchy=True,\n\
+          \        temporal_encoding=True,\n    )\n    inference = HuggingFaceDecoderInference(\n\
+          \        model_path=model_path,\n        tokenizer=tokenizer,\n        pooling=\"\
+          last_token\",\n    )\n    print(f\"Model: {inference.device}, embed_dim={inference.embedding_dim}\"\
+          )\n\n    temporal_dir = os.path.join(work_dir, \"data\", \"TabFormer\",\
+          \ \"temporal_split\")\n    embed_dir    = os.path.join(work_dir, \"data\"\
+          , \"embeddings\")\n    os.makedirs(embed_dir, exist_ok=True)\n\n    split_to_parquet\
+          \ = {\n        \"train\": \"train.parquet\",\n        \"val\":   \"val_eval.parquet\"\
+          ,\n        \"test\":  \"test_eval.parquet\",\n    }\n\n    all_embeddings\
+          \ = []\n    all_labels     = []\n    split_sizes    = {}\n\n    for split\
+          \ in (\"train\", \"val\", \"test\"):\n        embed_path  = os.path.join(embed_dir,\
+          \ f\"{split}_embeddings.npy\")\n        label_path  = os.path.join(embed_dir,\
+          \ f\"{split}_labels.npy\")\n        row_id_path = os.path.join(embed_dir,\
+          \ f\"{split}_row_ids.npy\")\n\n        if os.path.exists(embed_path) and\
+          \ os.path.exists(label_path):\n            emb = np.load(embed_path)\n \
+          \           lbl = np.load(label_path)\n            print(f\"[{split}] Already\
+          \ extracted: {emb.shape}, {lbl.sum():,} fraud \u2014 skipping\")\n     \
+          \       all_embeddings.append(emb)\n            all_labels.append(lbl)\n\
+          \            split_sizes[split] = len(emb)\n            continue\n\n   \
+          \     parquet_path = os.path.join(temporal_dir, split_to_parquet[split])\n\
+          \        print(f\"\\n{'='*60}\\nExtracting {split} embeddings\\n{'='*60}\"\
+          )\n\n        t0  = time.time()\n        gdf = cudf.read_parquet(parquet_path)\n\
+          \n        # Extract labels before preprocess() renames columns\n       \
+          \ labels = None\n        for col in [\"Is Fraud?\", \"is_fraud\", \"Is_Fraud\"\
+          , \"label\", \"fraud\"]:\n            if col in gdf.columns:\n         \
+          \       lbl_series = gdf[col].to_pandas()\n                if lbl_series.dtype\
+          \ == object:\n                    labels = ((lbl_series == \"Yes\") | (lbl_series\
+          \ == \"1\")).astype(int).values\n                else:\n               \
+          \     labels = lbl_series.astype(int).values\n                print(f\"\
+          \  Labels from '{col}': {labels.sum():,} fraud / {len(labels):,}\")\n  \
+          \              break\n\n        # Balanced sampling for train \u2014 must\
+          \ match notebook 05 (deterministic seed)\n        if split == \"train\"\
+          \ and labels is not None:\n            fraud_idx  = np.where(labels == 1)[0]\n\
+          \            normal_idx = np.where(labels == 0)[0]\n            np.random.seed(42)\n\
+          \            n_fraud  = min(len(fraud_idx),  int(BALANCED_TRAIN_SIZE * 0.1))\n\
+          \            n_normal = min(len(normal_idx), BALANCED_TRAIN_SIZE - n_fraud)\n\
+          \            sampled  = np.concatenate([\n                np.random.choice(fraud_idx,\
+          \  n_fraud,  replace=False),\n                np.random.choice(normal_idx,\
+          \ n_normal, replace=False),\n            ])\n            np.random.shuffle(sampled)\n\
+          \            gdf    = gdf.iloc[sampled].reset_index(drop=True)\n       \
+          \     labels = labels[sampled]\n            print(f\"  Balanced: {len(gdf):,}\
+          \ rows, {labels.sum():,} fraud ({labels.mean():.1%})\")\n\n        # Preserve\
+          \ row IDs so raw features can be aligned after preprocess() sorts rows\n\
+          \        gdf[\"__row_id__\"] = np.arange(len(gdf), dtype=np.int64)\n\n \
+          \       pip     = FinancialTokenizerPipeline(merchant_hash_size=MERCHANT_HASH_SIZE)\n\
+          \        gdf     = pip.preprocess(gdf)\n        row_ids = gdf[\"__row_id__\"\
+          ].to_pandas().to_numpy(dtype=np.int64)\n        if labels is not None:\n\
+          \            labels = labels[row_ids]\n        pip.fit(gdf)\n        token_df\
+          \   = pip.transform(gdf)\n        padded_ids = pip.encode(token_df, max_length=MAX_LENGTH)\n\
+          \        print(f\"  Tokenized {len(padded_ids):,} rows in {time.time()-t0:.1f}s\"\
+          )\n\n        t0  = time.time()\n        emb = inference.extract_embeddings_batched(\n\
+          \            padded_ids, batch_size=BATCH_SIZE, show_progress=True\n   \
+          \     )\n        print(f\"  Extracted {emb.shape} in {time.time()-t0:.1f}s\"\
+          )\n\n        np.save(embed_path, emb)\n        if labels is not None:\n\
+          \            np.save(label_path, labels)\n        np.save(row_id_path, row_ids)\n\
+          \n        all_embeddings.append(emb)\n        all_labels.append(labels if\
+          \ labels is not None else np.zeros(len(emb), dtype=np.int8))\n        split_sizes[split]\
+          \ = len(emb)\n\n    # ------------------------------------------------------------------\n\
+          \    # Save concatenated embeddings + metadata.json\n    # ------------------------------------------------------------------\n\
+          \    embeddings_all = np.concatenate(all_embeddings)\n    labels_all   \
+          \  = np.concatenate(all_labels)\n    np.save(os.path.join(embed_dir, \"\
+          embeddings.npy\"), embeddings_all)\n    np.save(os.path.join(embed_dir,\
+          \ \"labels.npy\"),     labels_all)\n\n    metadata = {\n        \"backend\"\
+          :           \"huggingface_decoder\",\n        \"pooling\":           \"\
+          last_token\",\n        \"model_path\":        str(model_path),\n       \
+          \ \"n_samples\":         len(embeddings_all),\n        \"embedding_dim\"\
+          :     int(embeddings_all.shape[1]),\n        \"batch_size\":        BATCH_SIZE,\n\
+          \        \"max_length\":        MAX_LENGTH,\n        \"splits\":       \
+          \     [\"train\", \"val\", \"test\"],\n        \"n_train\":           split_sizes.get(\"\
+          train\", 0),\n        \"n_val\":             split_sizes.get(\"val\",  \
+          \ 0),\n        \"n_test\":            split_sizes.get(\"test\",  0),\n \
+          \       \"row_id_alignment\":  \"explicit_split_row_ids\",\n    }\n    with\
+          \ open(os.path.join(embed_dir, \"metadata.json\"), \"w\") as f:\n      \
+          \  json.dump(metadata, f, indent=2)\n\n    print(f\"\\nAll embeddings saved\
+          \ to {embed_dir}\")\n    for k, v in split_sizes.items():\n        print(f\"\
+          \  {k}: {v:,}\")\n\n    return embed_dir\n\n"
+        env:
+        - name: HOME
+          value: /tmp
+        image: image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest
+        resources:
+          accelerator:
+            count: '1'
+            resourceCount: '1'
+            resourceType: nvidia.com/gpu
+            type: nvidia.com/gpu
+          cpuRequest: 4.0
+          memoryRequest: 32.0
+          resourceCpuRequest: '4'
+          resourceMemoryRequest: 32G
+    exec-extract-embeddings-2:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - extract_embeddings
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.13.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef extract_embeddings(\n    work_dir:   str,\n    model_path: str\
+          \ = \"models/decoder-foundation-model\",\n) -> str:\n    \"\"\"Extract 512-d\
+          \ last-token embeddings from the decoder model.\n\n    True decorated component\
+          \ \u2014 calls src/ directly.\n    Contrast with nemo_tfm_pipeline.py which\
+          \ uses papermill to run the\n    equivalent notebook (04_inference_embedding_extraction.ipynb).\n\
+          \n    Runs GPU-accelerated cuDF tokenisation + HuggingFaceDecoderInference\n\
+          \    batch inference for all three splits:\n      - train:  balanced ~1M\
+          \ sample (10% fraud, seed=42, matching notebook 05)\n      - val:    100K\
+          \ stratified subset from val_eval.parquet\n      - test:   100K stratified\
+          \ subset from test_eval.parquet\n\n    Row IDs are preserved before preprocess()\
+          \ sorts by user/card/time, so\n    raw feature alignment in evaluate_fraud_detection\
+          \ is exact.\n\n    LFS smudge logic: if models/decoder-foundation-model/\
+          \ contains pointer\n    files (133-byte git-lfs stubs rather than real safetensors),\
+          \ the real\n    blobs are fetched from GitHub LFS automatically before inference.\
+          \ This\n    logic is copied verbatim from inference_embedding_extraction\
+          \ in\n    nemo_tfm_pipeline.py so behaviour is identical in both pipelines.\n\
+          \n    Better than papermill: model_path is an explicit typed input \u2014\
+          \ if you\n    evaluate a different checkpoint the decision is recorded in\
+          \ the run's\n    lineage. The papermill version buries the model path in\
+          \ a notebook cell.\n\n    Parameters\n    ----------\n    work_dir   : str\
+          \ \u2014 repo root on the shared PVC\n    model_path : str \u2014 relative\
+          \ or absolute path to the model checkpoint.\n                       Default:\
+          \ models/decoder-foundation-model/ (Git LFS,\n                       3000-step\
+          \ NVIDIA checkpoint). In both demo and train\n                       modes\
+          \ this default is used \u2014 training output is separate.\n\n    Returns\n\
+          \    -------\n    str\n        Absolute path to data/embeddings/ on the\
+          \ shared PVC.\n    \"\"\"\n    import glob\n    import json\n    import\
+          \ os\n    import sys\n    import subprocess\n    import time\n\n    import\
+          \ numpy as np\n\n    # True decorated component \u2014 calls src/ directly.\n\
+          \    sys.path.insert(0, work_dir)\n    os.environ[\"HOME\"] = \"/tmp\"\n\
+          \n    # Resolve model_path relative to work_dir if not absolute\n    if\
+          \ not os.path.isabs(model_path):\n        model_path = os.path.join(work_dir,\
+          \ model_path)\n\n    # ------------------------------------------------------------------\n\
+          \    # LFS smudge: detect pointer files and download real safetensors blobs.\n\
+          \    # Copied verbatim from inference_embedding_extraction in nemo_tfm_pipeline.py\n\
+          \    # \u2014 behaviour is identical in both pipelines. Do not modify independently.\n\
+          \    # ------------------------------------------------------------------\n\
+          \    LFS_REPO = (\n        \"https://github.com/robbybrodie/\"\n       \
+          \ \"transaction-foundation-model-openshiftai.git\"\n    )\n    for model_file\
+          \ in glob.glob(os.path.join(model_path, \"*.safetensors\")):\n        with\
+          \ open(model_file, \"rb\") as _f:\n            header = _f.read(50)\n  \
+          \      if not header.startswith(b\"version https://git-lfs\"):\n       \
+          \     continue\n        with open(model_file, encoding=\"utf-8\") as _f:\n\
+          \            pointer_text = _f.read()\n        oid = next(\n           \
+          \ line.split(\"sha256:\")[1].strip()\n            for line in pointer_text.splitlines()\n\
+          \            if line.startswith(\"oid \")\n        )\n        size = int(next(\n\
+          \            line.split()[1]\n            for line in pointer_text.splitlines()\n\
+          \            if line.startswith(\"size \")\n        ))\n        print(\n\
+          \            f\"LFS pointer detected: {os.path.basename(model_file)} \"\n\
+          \            f\"({size:,} bytes). Fetching real blob...\"\n        )\n \
+          \       batch_body = json.dumps({\n            \"operation\": \"download\"\
+          ,\n            \"transfers\": [\"basic\"],\n            \"objects\": [{\"\
+          oid\": oid, \"size\": size}],\n        })\n        batch_result = subprocess.run(\n\
+          \            [\n                \"curl\", \"-s\", \"-X\", \"POST\",\n  \
+          \              \"-H\", \"Content-Type: application/vnd.git-lfs+json\",\n\
+          \                \"-H\", \"Accept: application/vnd.git-lfs+json\",\n   \
+          \             f\"{LFS_REPO}/info/lfs/objects/batch\",\n                \"\
+          -d\", batch_body,\n            ],\n            capture_output=True, text=True,\
+          \ check=True,\n        )\n        batch_resp = json.loads(batch_result.stdout)\n\
+          \        download_url = batch_resp[\"objects\"][0][\"actions\"][\"download\"\
+          ][\"href\"]\n        print(f\"Downloading {os.path.basename(model_file)}...\"\
+          )\n        subprocess.run([\"curl\", \"-L\", \"-o\", model_file, download_url],\
+          \ check=True)\n        print(f\"Smudged: {os.path.basename(model_file)}\
+          \ = {os.path.getsize(model_file):,} bytes\")\n\n    # ------------------------------------------------------------------\n\
+          \    # Initialise tokeniser and model\n    # ------------------------------------------------------------------\n\
+          \    import cudf\n    from src.tokenizer import FinancialTokenizerPipeline,\
+          \ FinancialTabularTokenizer\n    from src.decoder_inference import HuggingFaceDecoderInference\n\
+          \n    BATCH_SIZE          = 1024\n    MAX_LENGTH          = 128\n    MERCHANT_HASH_SIZE\
+          \  = 2000\n    BALANCED_TRAIN_SIZE = 1_000_000\n\n    tokenizer = FinancialTabularTokenizer(\n\
+          \        merchant_hash_size=MERCHANT_HASH_SIZE,\n        category_hierarchy=True,\n\
+          \        temporal_encoding=True,\n    )\n    inference = HuggingFaceDecoderInference(\n\
+          \        model_path=model_path,\n        tokenizer=tokenizer,\n        pooling=\"\
+          last_token\",\n    )\n    print(f\"Model: {inference.device}, embed_dim={inference.embedding_dim}\"\
+          )\n\n    temporal_dir = os.path.join(work_dir, \"data\", \"TabFormer\",\
+          \ \"temporal_split\")\n    embed_dir    = os.path.join(work_dir, \"data\"\
+          , \"embeddings\")\n    os.makedirs(embed_dir, exist_ok=True)\n\n    split_to_parquet\
+          \ = {\n        \"train\": \"train.parquet\",\n        \"val\":   \"val_eval.parquet\"\
+          ,\n        \"test\":  \"test_eval.parquet\",\n    }\n\n    all_embeddings\
+          \ = []\n    all_labels     = []\n    split_sizes    = {}\n\n    for split\
+          \ in (\"train\", \"val\", \"test\"):\n        embed_path  = os.path.join(embed_dir,\
+          \ f\"{split}_embeddings.npy\")\n        label_path  = os.path.join(embed_dir,\
+          \ f\"{split}_labels.npy\")\n        row_id_path = os.path.join(embed_dir,\
+          \ f\"{split}_row_ids.npy\")\n\n        if os.path.exists(embed_path) and\
+          \ os.path.exists(label_path):\n            emb = np.load(embed_path)\n \
+          \           lbl = np.load(label_path)\n            print(f\"[{split}] Already\
+          \ extracted: {emb.shape}, {lbl.sum():,} fraud \u2014 skipping\")\n     \
+          \       all_embeddings.append(emb)\n            all_labels.append(lbl)\n\
+          \            split_sizes[split] = len(emb)\n            continue\n\n   \
+          \     parquet_path = os.path.join(temporal_dir, split_to_parquet[split])\n\
+          \        print(f\"\\n{'='*60}\\nExtracting {split} embeddings\\n{'='*60}\"\
+          )\n\n        t0  = time.time()\n        gdf = cudf.read_parquet(parquet_path)\n\
+          \n        # Extract labels before preprocess() renames columns\n       \
+          \ labels = None\n        for col in [\"Is Fraud?\", \"is_fraud\", \"Is_Fraud\"\
+          , \"label\", \"fraud\"]:\n            if col in gdf.columns:\n         \
+          \       lbl_series = gdf[col].to_pandas()\n                if lbl_series.dtype\
+          \ == object:\n                    labels = ((lbl_series == \"Yes\") | (lbl_series\
+          \ == \"1\")).astype(int).values\n                else:\n               \
+          \     labels = lbl_series.astype(int).values\n                print(f\"\
+          \  Labels from '{col}': {labels.sum():,} fraud / {len(labels):,}\")\n  \
+          \              break\n\n        # Balanced sampling for train \u2014 must\
+          \ match notebook 05 (deterministic seed)\n        if split == \"train\"\
+          \ and labels is not None:\n            fraud_idx  = np.where(labels == 1)[0]\n\
+          \            normal_idx = np.where(labels == 0)[0]\n            np.random.seed(42)\n\
+          \            n_fraud  = min(len(fraud_idx),  int(BALANCED_TRAIN_SIZE * 0.1))\n\
+          \            n_normal = min(len(normal_idx), BALANCED_TRAIN_SIZE - n_fraud)\n\
+          \            sampled  = np.concatenate([\n                np.random.choice(fraud_idx,\
+          \  n_fraud,  replace=False),\n                np.random.choice(normal_idx,\
+          \ n_normal, replace=False),\n            ])\n            np.random.shuffle(sampled)\n\
+          \            gdf    = gdf.iloc[sampled].reset_index(drop=True)\n       \
+          \     labels = labels[sampled]\n            print(f\"  Balanced: {len(gdf):,}\
+          \ rows, {labels.sum():,} fraud ({labels.mean():.1%})\")\n\n        # Preserve\
+          \ row IDs so raw features can be aligned after preprocess() sorts rows\n\
+          \        gdf[\"__row_id__\"] = np.arange(len(gdf), dtype=np.int64)\n\n \
+          \       pip     = FinancialTokenizerPipeline(merchant_hash_size=MERCHANT_HASH_SIZE)\n\
+          \        gdf     = pip.preprocess(gdf)\n        row_ids = gdf[\"__row_id__\"\
+          ].to_pandas().to_numpy(dtype=np.int64)\n        if labels is not None:\n\
+          \            labels = labels[row_ids]\n        pip.fit(gdf)\n        token_df\
+          \   = pip.transform(gdf)\n        padded_ids = pip.encode(token_df, max_length=MAX_LENGTH)\n\
+          \        print(f\"  Tokenized {len(padded_ids):,} rows in {time.time()-t0:.1f}s\"\
+          )\n\n        t0  = time.time()\n        emb = inference.extract_embeddings_batched(\n\
+          \            padded_ids, batch_size=BATCH_SIZE, show_progress=True\n   \
+          \     )\n        print(f\"  Extracted {emb.shape} in {time.time()-t0:.1f}s\"\
+          )\n\n        np.save(embed_path, emb)\n        if labels is not None:\n\
+          \            np.save(label_path, labels)\n        np.save(row_id_path, row_ids)\n\
+          \n        all_embeddings.append(emb)\n        all_labels.append(labels if\
+          \ labels is not None else np.zeros(len(emb), dtype=np.int8))\n        split_sizes[split]\
+          \ = len(emb)\n\n    # ------------------------------------------------------------------\n\
+          \    # Save concatenated embeddings + metadata.json\n    # ------------------------------------------------------------------\n\
+          \    embeddings_all = np.concatenate(all_embeddings)\n    labels_all   \
+          \  = np.concatenate(all_labels)\n    np.save(os.path.join(embed_dir, \"\
+          embeddings.npy\"), embeddings_all)\n    np.save(os.path.join(embed_dir,\
+          \ \"labels.npy\"),     labels_all)\n\n    metadata = {\n        \"backend\"\
+          :           \"huggingface_decoder\",\n        \"pooling\":           \"\
+          last_token\",\n        \"model_path\":        str(model_path),\n       \
+          \ \"n_samples\":         len(embeddings_all),\n        \"embedding_dim\"\
+          :     int(embeddings_all.shape[1]),\n        \"batch_size\":        BATCH_SIZE,\n\
+          \        \"max_length\":        MAX_LENGTH,\n        \"splits\":       \
+          \     [\"train\", \"val\", \"test\"],\n        \"n_train\":           split_sizes.get(\"\
+          train\", 0),\n        \"n_val\":             split_sizes.get(\"val\",  \
+          \ 0),\n        \"n_test\":            split_sizes.get(\"test\",  0),\n \
+          \       \"row_id_alignment\":  \"explicit_split_row_ids\",\n    }\n    with\
+          \ open(os.path.join(embed_dir, \"metadata.json\"), \"w\") as f:\n      \
+          \  json.dump(metadata, f, indent=2)\n\n    print(f\"\\nAll embeddings saved\
+          \ to {embed_dir}\")\n    for k, v in split_sizes.items():\n        print(f\"\
+          \  {k}: {v:,}\")\n\n    return embed_dir\n\n"
+        env:
+        - name: HOME
+          value: /tmp
+        image: image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest
+        resources:
+          accelerator:
+            count: '1'
+            resourceCount: '1'
+            resourceType: nvidia.com/gpu
+            type: nvidia.com/gpu
+          cpuRequest: 4.0
+          memoryRequest: 32.0
+          resourceCpuRequest: '4'
+          resourceMemoryRequest: 32G
+    exec-tokenize-transactions:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - tokenize_transactions
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.13.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef tokenize_transactions(work_dir: str) -> str:\n    \"\"\"Run the\
+          \ GPU-accelerated financial tokeniser and write text corpora.\n\n    True\
+          \ decorated component \u2014 calls src/ directly.\n    Contrast with nemo_tfm_pipeline.py\
+          \ which uses papermill to run the\n    equivalent notebook (02_seq_preproc_tokenization.ipynb).\n\
+          \n    Reads the temporal splits from data/TabFormer/temporal_split/ (produced\n\
+          \    by notebook 01), runs FinancialTokenizerPipeline.preprocess() to derive\n\
+          \    the 12 pipeline columns, then calls fit_transform() and to_corpus_lines()\n\
+          \    to produce text sequences in the format expected by NeMo AutoModel:\n\
+          \n        <bos> AMT_3 MERCH_1498 CAT_RETAIL ... CUST_42 <sep> AMT_1 ...\
+          \ <eos>\n\n    Each line is ~315 transactions (~4096 tokens at 12 tok/txn\
+          \ + separators),\n    matching the model's context window. Three corpus\
+          \ files are written:\n    train_corpus.txt, val_corpus.txt, test_corpus.txt.\n\
+          \n    Better than papermill: the corpus directory path is a typed return\
+          \ value\n    recorded in KFP's metadata store. The notebook version writes\
+          \ wherever\n    the cell says, with no typed contract visible to downstream\
+          \ steps.\n\n    Returns\n    -------\n    str\n        Absolute path to\
+          \ data/decoder_corpus/ on the shared PVC.\n    \"\"\"\n    import os\n \
+          \   import sys\n    import time\n\n    # True decorated component \u2014\
+          \ calls src/ directly.\n    sys.path.insert(0, work_dir)\n    os.environ[\"\
+          HOME\"] = \"/tmp\"\n\n    import cudf\n    from src.tokenizer import FinancialTokenizerPipeline\n\
+          \n    MERCHANT_HASH_SIZE = 2000\n    CHUNK_SIZE = 315  # ~4096 tokens at\
+          \ 12 tokens/txn + separators\n\n    temporal_dir = os.path.join(work_dir,\
+          \ \"data\", \"TabFormer\", \"temporal_split\")\n    corpus_dir   = os.path.join(work_dir,\
+          \ \"data\", \"decoder_corpus\")\n    os.makedirs(corpus_dir, exist_ok=True)\n\
+          \n    splits = [\n        (\"train\", os.path.join(temporal_dir, \"train.parquet\"\
+          ),\n                  os.path.join(corpus_dir, \"train_corpus.txt\")),\n\
+          \        (\"val\",   os.path.join(temporal_dir, \"val.parquet\"),\n    \
+          \              os.path.join(corpus_dir, \"val_corpus.txt\")),\n        (\"\
+          test\",  os.path.join(temporal_dir, \"test.parquet\"),\n               \
+          \   os.path.join(corpus_dir, \"test_corpus.txt\")),\n    ]\n\n    for split_name,\
+          \ parquet_path, corpus_path in splits:\n        if os.path.exists(corpus_path):\n\
+          \            n_lines = sum(1 for _ in open(corpus_path))\n            print(f\"\
+          [{split_name}] Corpus already exists: {n_lines:,} sequences \u2014 skipping\"\
+          )\n            continue\n\n        print(f\"\\n{'='*60}\")\n        print(f\"\
+          Generating corpus for {split_name}\")\n        print(f\"{'='*60}\")\n\n\
+          \        t0 = time.time()\n        gdf = cudf.read_parquet(parquet_path)\n\
+          \        print(f\"  Loaded {len(gdf):,} rows in {time.time()-t0:.1f}s\"\
+          )\n\n        pip = FinancialTokenizerPipeline(merchant_hash_size=MERCHANT_HASH_SIZE)\n\
+          \        gdf_proc = pip.preprocess(gdf)\n        pip.fit(gdf_proc)\n   \
+          \     token_df = pip.transform(gdf_proc)\n\n        # Identify group columns\
+          \ for chunking by (user, card)\n        group_cols = []\n        for col_name\
+          \ in [\"user\", \"User\", \"cust\"]:\n            if col_name in gdf_proc.columns:\n\
+          \                group_cols.append(col_name)\n                break\n  \
+          \      for col_name in [\"card\", \"Card\", \"card_id\"]:\n            if\
+          \ col_name in gdf_proc.columns:\n                group_cols.append(col_name)\n\
+          \                break\n        if not group_cols:\n            group_cols\
+          \ = [gdf_proc.columns[0]]\n\n        corpus_lines = pip.to_corpus_lines(\n\
+          \            token_df, gdf_proc, group_cols, chunk_size=CHUNK_SIZE\n   \
+          \     )\n\n        with open(corpus_path, \"w\") as f:\n            for\
+          \ line in corpus_lines:\n                f.write(line + \"\\n\")\n\n   \
+          \     elapsed = time.time() - t0\n        print(f\"  Generated {len(corpus_lines):,}\
+          \ sequences in {elapsed:.1f}s\")\n        print(f\"  Saved \u2192 {corpus_path}\"\
+          )\n\n    return corpus_dir\n\n"
+        env:
+        - name: HOME
+          value: /tmp
+        image: image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest
+        resources:
+          accelerator:
+            count: '1'
+            resourceCount: '1'
+            resourceType: nvidia.com/gpu
+            type: nvidia.com/gpu
+          cpuRequest: 4.0
+          memoryRequest: 32.0
+          resourceCpuRequest: '4'
+          resourceMemoryRequest: 32G
+    exec-train-foundation-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_foundation_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.13.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_foundation_model(\n    work_dir:    str,\n    corpus_dir:\
+          \  str,\n    config_path: str = \"configs/pretrain_financial_decoder.yaml\"\
+          ,\n    max_steps:   int = 30,\n) -> str:\n    \"\"\"Run NeMo decoder pretraining\
+          \ via torchrun.\n\n    True decorated component \u2014 calls src/ directly.\n\
+          \    Contrast with nemo_tfm_pipeline.py which uses papermill to run the\n\
+          \    equivalent notebook (03_foundation_model_training.ipynb).\n\n    Wraps\
+          \ torchrun --nproc-per-node=1 around scripts/train_decoder_model.py,\n \
+          \   passing the supplied YAML config and max_steps override. Single-GPU\
+          \ inside\n    the KFP component container. For multi-node distributed training,\
+          \ use\n    openshift/training/pytorchjob.yaml (KFTO PyTorchJob) instead\
+          \ \u2014 the KFP\n    pipeline can submit a PyTorchJob and poll for completion\
+          \ via the\n    Kubernetes client (documented as a future enhancement).\n\
+          \n    corpus_dir is an explicit typed input derived from tokenize_transactions.\n\
+          \    The data dependency ensures this component waits for tokenization to\n\
+          \    complete before launching training \u2014 the corpus files must exist\
+          \ before\n    the NeMo dataloader opens them.\n\n    Better than papermill:\
+          \ max_steps is a typed pipeline parameter recorded in\n    the KFP metadata\
+          \ store. You can compare runs and see exactly how many steps\n    each training\
+          \ run executed, not just \"notebook 03 ran.\"\n\n    Parameters\n    ----------\n\
+          \    work_dir    : str  \u2014 repo root on the shared PVC\n    corpus_dir\
+          \  : str  \u2014 path returned by tokenize_transactions (data dependency)\n\
+          \    config_path : str  \u2014 path to NeMo YAML config, relative to work_dir\n\
+          \    max_steps   : int  \u2014 training steps (30 = demo, increase for real\
+          \ training)\n\n    Returns\n    -------\n    str\n        Absolute path\
+          \ to models/decoder-demo/checkpoints/ on the shared PVC.\n    \"\"\"\n \
+          \   import os\n    import sys\n    import subprocess\n\n    # True decorated\
+          \ component \u2014 calls src/ directly.\n    sys.path.insert(0, work_dir)\n\
+          \    os.environ[\"HOME\"] = \"/tmp\"\n\n    abs_config   = os.path.join(work_dir,\
+          \ config_path)\n    train_script = os.path.join(work_dir, \"scripts\", \"\
+          train_decoder_model.py\")\n    train_corpus = os.path.join(corpus_dir, \"\
+          train_corpus.txt\")\n    val_corpus   = os.path.join(corpus_dir, \"val_corpus.txt\"\
+          )\n\n    print(f\"NeMo pretraining: max_steps={max_steps}\")\n    print(f\"\
+          \  Config:         {abs_config}\")\n    print(f\"  Train corpus:   {train_corpus}\"\
+          )\n    print(f\"  Val corpus:     {val_corpus}\")\n\n    env = os.environ.copy()\n\
+          \    env[\"PYTHONPATH\"] = work_dir + \":\" + env.get(\"PYTHONPATH\", \"\
+          \")\n\n    cmd = [\n        \"torchrun\", \"--nproc-per-node=1\",\n    \
+          \    train_script,\n        \"-c\", abs_config,\n        f\"--dataset.data_path={train_corpus}\"\
+          ,\n        f\"--validation_dataset.data_path={val_corpus}\",\n        f\"\
+          --step_scheduler.max_steps={max_steps}\",\n    ]\n\n    subprocess.run(cmd,\
+          \ check=True, cwd=work_dir, env=env)\n\n    checkpoint_dir = os.path.join(work_dir,\
+          \ \"models\", \"decoder-demo\", \"checkpoints\")\n    print(f\"Training\
+          \ complete. Checkpoint dir: {checkpoint_dir}\")\n    return checkpoint_dir\n\
+          \n"
+        env:
+        - name: HOME
+          value: /tmp
+        image: image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest
+        resources:
+          accelerator:
+            count: '1'
+            resourceCount: '1'
+            resourceType: nvidia.com/gpu
+            type: nvidia.com/gpu
+          cpuRequest: 8.0
+          memoryRequest: 64.0
+          resourceCpuRequest: '8'
+          resourceMemoryRequest: 64G
+pipelineInfo:
+  description: "Decorated KFP v2 pipeline \u2014 typed I/O components calling src/\
+    \ directly. Contrast with nemo-transaction-foundation-model (papermill version)."
+  name: nemo-tfm-foundation-model-decorated
+root:
+  dag:
+    tasks:
+      condition-branches-1:
+        componentRef:
+          name: comp-condition-branches-1
+        dependentTasks:
+        - tokenize-transactions
+        inputs:
+          parameters:
+            pipelinechannel--max_steps:
+              componentInputParameter: max_steps
+            pipelinechannel--mode:
+              componentInputParameter: mode
+            pipelinechannel--model_path:
+              componentInputParameter: model_path
+            pipelinechannel--tokenize-transactions-Output:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: tokenize-transactions
+            pipelinechannel--work_dir:
+              componentInputParameter: work_dir
+        taskInfo:
+          name: condition-branches-1
+      tokenize-transactions:
+        cachingOptions: {}
+        componentRef:
+          name: comp-tokenize-transactions
+        inputs:
+          parameters:
+            work_dir:
+              componentInputParameter: work_dir
+        taskInfo:
+          name: tokenize-transactions
+  inputDefinitions:
+    parameters:
+      max_steps:
+        defaultValue: 30.0
+        description: 30 = demo; increase for real training runs.
+        isOptional: true
+        parameterType: NUMBER_INTEGER
+      mode:
+        defaultValue: demo
+        isOptional: true
+        parameterType: STRING
+      model_path:
+        defaultValue: models/decoder-foundation-model
+        description: 'Default: models/decoder-foundation-model/ (Git LFS,
+
+          3000-step NVIDIA checkpoint). Relative paths are resolved
+
+          from work_dir inside extract_embeddings.'
+        isOptional: true
+        parameterType: STRING
+      work_dir:
+        defaultValue: /opt/app-root/src/nemo-tfm
+        isOptional: true
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.13.0
+---
+platforms:
+  kubernetes:
+    deploymentSpec:
+      executors:
+        exec-evaluate-fraud-detection:
+          nodeSelector:
+            labels:
+              nvidia.com/gpu.present: 'true'
+          pvcMount:
+          - constant: nemo-tfm-workbench-data
+            mountPath: /opt/app-root/src
+            pvcNameParameter:
+              runtimeValue:
+                constant: nemo-tfm-workbench-data
+        exec-evaluate-fraud-detection-2:
+          nodeSelector:
+            labels:
+              nvidia.com/gpu.present: 'true'
+          pvcMount:
+          - constant: nemo-tfm-workbench-data
+            mountPath: /opt/app-root/src
+            pvcNameParameter:
+              runtimeValue:
+                constant: nemo-tfm-workbench-data
+        exec-extract-embeddings:
+          nodeSelector:
+            labels:
+              nvidia.com/gpu.present: 'true'
+          pvcMount:
+          - constant: nemo-tfm-workbench-data
+            mountPath: /opt/app-root/src
+            pvcNameParameter:
+              runtimeValue:
+                constant: nemo-tfm-workbench-data
+        exec-extract-embeddings-2:
+          nodeSelector:
+            labels:
+              nvidia.com/gpu.present: 'true'
+          pvcMount:
+          - constant: nemo-tfm-workbench-data
+            mountPath: /opt/app-root/src
+            pvcNameParameter:
+              runtimeValue:
+                constant: nemo-tfm-workbench-data
+        exec-tokenize-transactions:
+          nodeSelector:
+            labels:
+              nvidia.com/gpu.present: 'true'
+          pvcMount:
+          - constant: nemo-tfm-workbench-data
+            mountPath: /opt/app-root/src
+            pvcNameParameter:
+              runtimeValue:
+                constant: nemo-tfm-workbench-data
+        exec-train-foundation-model:
+          nodeSelector:
+            labels:
+              nvidia.com/gpu.present: 'true'
+          pvcMount:
+          - constant: nemo-tfm-workbench-data
+            mountPath: /opt/app-root/src
+            pvcNameParameter:
+              runtimeValue:
+                constant: nemo-tfm-workbench-data
