@@ -7,6 +7,23 @@ and model artefacts are visible across the whole run.
 Each step's name in the RHOAI Dashboard matches the source notebook filename
 so data scientists can map steps to notebooks at a glance.
 
+Pipeline modes
+--------------
+mode="demo"  (default)
+    s1 → s2 → s4 → s5
+    Skips notebook 03 (training).  Uses the Git LFS 3000-step checkpoint
+    already present at models/decoder-foundation-model/ for embedding
+    extraction.  Completes in ~20-30 minutes on an L4 GPU.
+    Use this for every demo — the accuracy story is reproducible and fast.
+
+mode="train"
+    s1 → s2 → s3 → s4 → s5
+    Runs notebook 03 (30-step demo training) before embedding extraction.
+    Notebook 04 still uses models/decoder-foundation-model/ (the Git LFS
+    checkpoint), NOT models/decoder-demo/.  Training runs to demonstrate
+    the capability; the proven checkpoint ensures the accuracy story
+    remains consistent regardless of the 30-step output quality.
+
 The pipeline can be compiled to YAML by running this file directly:
 
     python pipeline/nemo_tfm_pipeline.py
@@ -430,8 +447,25 @@ def _configure_task(task):
 # ---------------------------------------------------------------------------
 
 @dsl.pipeline(name=PIPELINE_NAME, description=PIPELINE_DESCRIPTION)
-def nemo_tfm_pipeline(work_dir: str = WORK_DIR):
-    """Five-step end-to-end pipeline for the NeMo transaction foundation model."""
+def nemo_tfm_pipeline(
+    work_dir: str = WORK_DIR,
+    mode: str = "demo",
+):
+    """Switchable end-to-end pipeline for the NeMo transaction foundation model.
+
+    Parameters
+    ----------
+    work_dir : str
+        Absolute path to the cloned repo on the shared PVC.
+        Default matches the init-container clone path in the workbench CR.
+    mode : str
+        "demo"  — skip training, use Git LFS checkpoint (default, ~20-30 min)
+        "train" — run all five steps including 30-step demo training
+    """
+
+    # ------------------------------------------------------------------
+    # Steps 1 and 2 always run in both modes
+    # ------------------------------------------------------------------
 
     # Step 1 — load the TabFormer dataset and run the XGBoost baseline
     s1 = dataset_baseline(work_dir=work_dir)
@@ -444,22 +478,48 @@ def nemo_tfm_pipeline(work_dir: str = WORK_DIR):
     s2.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
     _configure_task(s2)
 
-    # Step 3 — pre-train the NeMo decoder foundation model
-    s3 = foundation_model_training(work_dir=work_dir, prev=s2.output)
-    s3.set_cpu_request("8").set_memory_request("64G")
-    s3.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
-    _configure_task(s3)
+    # ------------------------------------------------------------------
+    # TRAIN MODE: s1 → s2 → s3 → s4 → s5
+    # Wrapping the full tail in dsl.If ensures s3, s4, and s5 remain
+    # strictly sequential inside the branch — critical because the shared
+    # PVC is EBS ReadWriteOnce and each GPU step needs the full GPU.
+    # ------------------------------------------------------------------
+    with dsl.If(mode == "train", name="train-mode"):
 
-    # Step 4 — extract 512-d embeddings from the trained model
-    s4 = inference_embedding_extraction(work_dir=work_dir, prev=s3.output)
-    s4.set_cpu_request("4").set_memory_request("32G")
-    s4.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
-    _configure_task(s4)
+        # Step 3 — pre-train the NeMo decoder foundation model (30 steps)
+        s3 = foundation_model_training(work_dir=work_dir, prev=s2.output)
+        s3.set_cpu_request("8").set_memory_request("64G")
+        s3.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
+        _configure_task(s3)
 
-    # Step 5 — compare XGBoost with raw features vs. NeMo embeddings
-    s5 = xgboost_fraud_detection(work_dir=work_dir, prev=s4.output)
-    s5.set_cpu_request("4").set_memory_request("16G")
-    _configure_task(s5)
+        # Step 4 — extract embeddings (always uses Git LFS checkpoint, not s3 output)
+        s4t = inference_embedding_extraction(work_dir=work_dir, prev=s3.output)
+        s4t.set_cpu_request("4").set_memory_request("32G")
+        s4t.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
+        _configure_task(s4t)
+
+        # Step 5 — XGBoost comparison
+        s5t = xgboost_fraud_detection(work_dir=work_dir, prev=s4t.output)
+        s5t.set_cpu_request("4").set_memory_request("16G")
+        _configure_task(s5t)
+
+    # ------------------------------------------------------------------
+    # DEMO MODE: s1 → s2 → s4 → s5  (training skipped)
+    # Notebook 04 uses models/decoder-foundation-model/ via LFS smudge —
+    # no dependency on s3 output. Completes in ~20-30 minutes on an L4.
+    # ------------------------------------------------------------------
+    with dsl.Else(name="demo-mode"):
+
+        # Step 4 — extract embeddings directly from Git LFS checkpoint
+        s4d = inference_embedding_extraction(work_dir=work_dir, prev=s2.output)
+        s4d.set_cpu_request("4").set_memory_request("32G")
+        s4d.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
+        _configure_task(s4d)
+
+        # Step 5 — XGBoost comparison
+        s5d = xgboost_fraud_detection(work_dir=work_dir, prev=s4d.output)
+        s5d.set_cpu_request("4").set_memory_request("16G")
+        _configure_task(s5d)
 
 
 # ---------------------------------------------------------------------------
