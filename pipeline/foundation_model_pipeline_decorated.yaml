@@ -1,6 +1,6 @@
 # PIPELINE DEFINITION
 # Name: nemo-tfm-foundation-model-decorated
-# Description: Decorated KFP v2 pipeline — typed I/O components calling src/ directly. Contrast with nemo-transaction-foundation-model (papermill version).
+# Description: Decorated KFP v2 pipeline -- typed I/O components calling src/ directly. Contrast with nemo-transaction-foundation-model (papermill version).
 # Inputs:
 #    force_rerun: bool [Default: False]
 #    max_steps: int [Default: 30.0]
@@ -215,9 +215,11 @@ components:
           parameterType: BOOLEAN
         model_path:
           defaultValue: models/decoder-foundation-model
-          description: "Default: models/decoder-foundation-model/ (Git LFS,\n3000-step\
-            \ NVIDIA checkpoint). In both demo and train\nmodes this default is used\
-            \ \u2014 training output is separate."
+          description: 'Default: models/decoder-foundation-model/ (Git LFS,
+
+            3000-step NVIDIA checkpoint). In both demo and train
+
+            modes this default is used -- training output is separate.'
           isOptional: true
           parameterType: STRING
         work_dir:
@@ -236,9 +238,11 @@ components:
           parameterType: BOOLEAN
         model_path:
           defaultValue: models/decoder-foundation-model
-          description: "Default: models/decoder-foundation-model/ (Git LFS,\n3000-step\
-            \ NVIDIA checkpoint). In both demo and train\nmodes this default is used\
-            \ \u2014 training output is separate."
+          description: 'Default: models/decoder-foundation-model/ (Git LFS,
+
+            3000-step NVIDIA checkpoint). In both demo and train
+
+            modes this default is used -- training output is separate.'
           isOptional: true
           parameterType: STRING
         work_dir:
@@ -316,7 +320,7 @@ deploymentSpec:
           \ *\n\ndef evaluate_fraud_detection(\n    work_dir:        str,\n    embeddings_path:\
           \ str,\n    metrics:         Output[Metrics],\n) -> float:\n    \"\"\"XGBoost\
           \ fraud detection: raw features vs. foundation model embeddings.\n\n   \
-          \ True decorated component \u2014 calls src/ directly. CPU only (no GPU).\n\
+          \ True decorated component -- calls src/ directly. CPU only (no GPU).\n\
           \    Contrast with nemo_tfm_pipeline.py which uses papermill to run the\n\
           \    equivalent notebook (05_xgboost_fraud_detection.ipynb).\n\n    Loads\
           \ pre-extracted embeddings and raw tabular features, reduces 512d\n    embeddings\
@@ -327,7 +331,7 @@ deploymentSpec:
           \ test ROC-AUC for the raw feature baseline\n      - auc_embeddings:   test\
           \ ROC-AUC for the embedding model\n      - lift_pct:         relative improvement\
           \ (the headline demo number)\n\n    These metrics appear in the OpenShift\
-          \ AI pipeline dashboard metrics tab \u2014\n    that is the screenshot that\
+          \ AI pipeline dashboard metrics tab --\n    that is the screenshot that\
           \ closes Demonstration 3 (\"The model accuracy\n    improvement is real\"\
           ). Pointing at lift_pct and saying \"this is the\n    improvement\" is only\
           \ credible because the KFP metadata store records\n    exactly what ran,\
@@ -336,16 +340,16 @@ deploymentSpec:
           \ metrics queryable\n    across runs, comparable across versions, and visible\
           \ in the dashboard\n    without opening the notebook. The papermill version\
           \ prints to a cell.\n\n    Parameters\n    ----------\n    work_dir    \
-          \    : str            \u2014 repo root on the shared PVC\n    embeddings_path\
-          \ : str            \u2014 path returned by extract_embeddings\n    metrics\
-          \         : Output[Metrics] \u2014 KFP-injected metrics sink\n\n    Returns\n\
+          \    : str            -- repo root on the shared PVC\n    embeddings_path\
+          \ : str            -- path returned by extract_embeddings\n    metrics \
+          \        : Output[Metrics] -- KFP-injected metrics sink\n\n    Returns\n\
           \    -------\n    float\n        Test ROC-AUC for the embedding model (the\
           \ headline accuracy number).\n    \"\"\"\n    import os\n    import sys\n\
           \    import json\n\n    import numpy as np\n    from sklearn.decomposition\
           \ import PCA\n    from sklearn.metrics import roc_auc_score\n    from sklearn.preprocessing\
           \ import OrdinalEncoder\n    from sklearn.compose import make_column_transformer,\
           \ make_column_selector\n    import xgboost as xgb\n    import cudf\n\n \
-          \   # True decorated component \u2014 calls src/ directly.\n    sys.path.insert(0,\
+          \   # True decorated component -- calls src/ directly.\n    sys.path.insert(0,\
           \ work_dir)\n    os.environ[\"HOME\"] = \"/tmp\"\n\n    embed_dir    = embeddings_path\
           \ if os.path.isabs(embeddings_path) else os.path.join(work_dir, embeddings_path)\n\
           \    temporal_dir = os.path.join(work_dir, \"data\", \"TabFormer\", \"temporal_split\"\
@@ -364,9 +368,9 @@ deploymentSpec:
           \    embed_dim_orig = X_train_embed_raw.shape[1]\n    print(f\"Embeddings:\
           \ train={n_train:,}, val={len(X_val_embed_raw):,}, \"\n          f\"test={len(X_test_embed_raw):,},\
           \ dim={embed_dim_orig}\")\n\n    # ------------------------------------------------------------------\n\
-          \    # PCA: 512d \u2192 64d\n    # ------------------------------------------------------------------\n\
-          \    PCA_DIM = 64\n    print(f\"PCA: {embed_dim_orig}d \u2192 {PCA_DIM}d\"\
-          )\n    pca = PCA(n_components=PCA_DIM, random_state=42)\n    X_train_embed_pca\
+          \    # PCA: 512d -> 64d\n    # ------------------------------------------------------------------\n\
+          \    PCA_DIM = 64\n    print(f\"PCA: {embed_dim_orig}d -> {PCA_DIM}d\")\n\
+          \    pca = PCA(n_components=PCA_DIM, random_state=42)\n    X_train_embed_pca\
           \ = pca.fit_transform(X_train_embed_raw)\n    X_val_embed_pca   = pca.transform(X_val_embed_raw)\n\
           \    X_test_embed_pca  = pca.transform(X_test_embed_raw)\n    print(f\"\
           \  Explained variance: {pca.explained_variance_ratio_.sum():.2%}\")\n\n\
@@ -387,9 +391,9 @@ deploymentSpec:
           \").astype(float)\n        )\n\n    train_pdf = train_gdf.to_pandas()\n\
           \    val_pdf   = val_gdf.to_pandas()\n    test_pdf  = test_gdf.to_pandas()\n\
           \    del train_gdf, val_gdf, test_gdf\n\n    # Recreate balanced sample\
-          \ indices \u2014 must match extract_embeddings (seed=42)\n    fraud_mask\
-          \    = (train_pdf[FRAUD_COL] == \"Yes\") | (train_pdf[FRAUD_COL] == \"1\"\
-          )\n    fraud_idx     = train_pdf.index[fraud_mask].tolist()\n    normal_idx\
+          \ indices -- must match extract_embeddings (seed=42)\n    fraud_mask   \
+          \ = (train_pdf[FRAUD_COL] == \"Yes\") | (train_pdf[FRAUD_COL] == \"1\")\n\
+          \    fraud_idx     = train_pdf.index[fraud_mask].tolist()\n    normal_idx\
           \    = train_pdf.index[~fraud_mask].tolist()\n    np.random.seed(42)\n \
           \   n_fraud_tgt   = min(len(fraud_idx),  int(BALANCED_TOTAL * 0.1))\n  \
           \  n_normal_tgt  = min(len(normal_idx), BALANCED_TOTAL - n_fraud_tgt)\n\
@@ -443,8 +447,8 @@ deploymentSpec:
           \ store)\")\n    print(f\"{'='*50}\")\n    print(f\"  auc_raw_features :\
           \ {baseline_auc:.4f}\")\n    print(f\"  auc_embeddings   : {embedding_auc:.4f}\"\
           )\n    print(f\"  lift_pct         : {lift_pct:+.2f}%\")\n    print(f\"\\\
-          nThese metrics appear in the RHOAI dashboard \u2192 Runs \u2192 Metrics\
-          \ tab.\")\n\n    return embedding_auc\n\n"
+          nThese metrics appear in the RHOAI dashboard -> Runs -> Metrics tab.\")\n\
+          \n    return embedding_auc\n\n"
         env:
         - name: HOME
           value: /tmp
@@ -483,7 +487,7 @@ deploymentSpec:
           \ *\n\ndef evaluate_fraud_detection(\n    work_dir:        str,\n    embeddings_path:\
           \ str,\n    metrics:         Output[Metrics],\n) -> float:\n    \"\"\"XGBoost\
           \ fraud detection: raw features vs. foundation model embeddings.\n\n   \
-          \ True decorated component \u2014 calls src/ directly. CPU only (no GPU).\n\
+          \ True decorated component -- calls src/ directly. CPU only (no GPU).\n\
           \    Contrast with nemo_tfm_pipeline.py which uses papermill to run the\n\
           \    equivalent notebook (05_xgboost_fraud_detection.ipynb).\n\n    Loads\
           \ pre-extracted embeddings and raw tabular features, reduces 512d\n    embeddings\
@@ -494,7 +498,7 @@ deploymentSpec:
           \ test ROC-AUC for the raw feature baseline\n      - auc_embeddings:   test\
           \ ROC-AUC for the embedding model\n      - lift_pct:         relative improvement\
           \ (the headline demo number)\n\n    These metrics appear in the OpenShift\
-          \ AI pipeline dashboard metrics tab \u2014\n    that is the screenshot that\
+          \ AI pipeline dashboard metrics tab --\n    that is the screenshot that\
           \ closes Demonstration 3 (\"The model accuracy\n    improvement is real\"\
           ). Pointing at lift_pct and saying \"this is the\n    improvement\" is only\
           \ credible because the KFP metadata store records\n    exactly what ran,\
@@ -503,16 +507,16 @@ deploymentSpec:
           \ metrics queryable\n    across runs, comparable across versions, and visible\
           \ in the dashboard\n    without opening the notebook. The papermill version\
           \ prints to a cell.\n\n    Parameters\n    ----------\n    work_dir    \
-          \    : str            \u2014 repo root on the shared PVC\n    embeddings_path\
-          \ : str            \u2014 path returned by extract_embeddings\n    metrics\
-          \         : Output[Metrics] \u2014 KFP-injected metrics sink\n\n    Returns\n\
+          \    : str            -- repo root on the shared PVC\n    embeddings_path\
+          \ : str            -- path returned by extract_embeddings\n    metrics \
+          \        : Output[Metrics] -- KFP-injected metrics sink\n\n    Returns\n\
           \    -------\n    float\n        Test ROC-AUC for the embedding model (the\
           \ headline accuracy number).\n    \"\"\"\n    import os\n    import sys\n\
           \    import json\n\n    import numpy as np\n    from sklearn.decomposition\
           \ import PCA\n    from sklearn.metrics import roc_auc_score\n    from sklearn.preprocessing\
           \ import OrdinalEncoder\n    from sklearn.compose import make_column_transformer,\
           \ make_column_selector\n    import xgboost as xgb\n    import cudf\n\n \
-          \   # True decorated component \u2014 calls src/ directly.\n    sys.path.insert(0,\
+          \   # True decorated component -- calls src/ directly.\n    sys.path.insert(0,\
           \ work_dir)\n    os.environ[\"HOME\"] = \"/tmp\"\n\n    embed_dir    = embeddings_path\
           \ if os.path.isabs(embeddings_path) else os.path.join(work_dir, embeddings_path)\n\
           \    temporal_dir = os.path.join(work_dir, \"data\", \"TabFormer\", \"temporal_split\"\
@@ -531,9 +535,9 @@ deploymentSpec:
           \    embed_dim_orig = X_train_embed_raw.shape[1]\n    print(f\"Embeddings:\
           \ train={n_train:,}, val={len(X_val_embed_raw):,}, \"\n          f\"test={len(X_test_embed_raw):,},\
           \ dim={embed_dim_orig}\")\n\n    # ------------------------------------------------------------------\n\
-          \    # PCA: 512d \u2192 64d\n    # ------------------------------------------------------------------\n\
-          \    PCA_DIM = 64\n    print(f\"PCA: {embed_dim_orig}d \u2192 {PCA_DIM}d\"\
-          )\n    pca = PCA(n_components=PCA_DIM, random_state=42)\n    X_train_embed_pca\
+          \    # PCA: 512d -> 64d\n    # ------------------------------------------------------------------\n\
+          \    PCA_DIM = 64\n    print(f\"PCA: {embed_dim_orig}d -> {PCA_DIM}d\")\n\
+          \    pca = PCA(n_components=PCA_DIM, random_state=42)\n    X_train_embed_pca\
           \ = pca.fit_transform(X_train_embed_raw)\n    X_val_embed_pca   = pca.transform(X_val_embed_raw)\n\
           \    X_test_embed_pca  = pca.transform(X_test_embed_raw)\n    print(f\"\
           \  Explained variance: {pca.explained_variance_ratio_.sum():.2%}\")\n\n\
@@ -554,9 +558,9 @@ deploymentSpec:
           \").astype(float)\n        )\n\n    train_pdf = train_gdf.to_pandas()\n\
           \    val_pdf   = val_gdf.to_pandas()\n    test_pdf  = test_gdf.to_pandas()\n\
           \    del train_gdf, val_gdf, test_gdf\n\n    # Recreate balanced sample\
-          \ indices \u2014 must match extract_embeddings (seed=42)\n    fraud_mask\
-          \    = (train_pdf[FRAUD_COL] == \"Yes\") | (train_pdf[FRAUD_COL] == \"1\"\
-          )\n    fraud_idx     = train_pdf.index[fraud_mask].tolist()\n    normal_idx\
+          \ indices -- must match extract_embeddings (seed=42)\n    fraud_mask   \
+          \ = (train_pdf[FRAUD_COL] == \"Yes\") | (train_pdf[FRAUD_COL] == \"1\")\n\
+          \    fraud_idx     = train_pdf.index[fraud_mask].tolist()\n    normal_idx\
           \    = train_pdf.index[~fraud_mask].tolist()\n    np.random.seed(42)\n \
           \   n_fraud_tgt   = min(len(fraud_idx),  int(BALANCED_TOTAL * 0.1))\n  \
           \  n_normal_tgt  = min(len(normal_idx), BALANCED_TOTAL - n_fraud_tgt)\n\
@@ -610,8 +614,8 @@ deploymentSpec:
           \ store)\")\n    print(f\"{'='*50}\")\n    print(f\"  auc_raw_features :\
           \ {baseline_auc:.4f}\")\n    print(f\"  auc_embeddings   : {embedding_auc:.4f}\"\
           )\n    print(f\"  lift_pct         : {lift_pct:+.2f}%\")\n    print(f\"\\\
-          nThese metrics appear in the RHOAI dashboard \u2192 Runs \u2192 Metrics\
-          \ tab.\")\n\n    return embedding_auc\n\n"
+          nThese metrics appear in the RHOAI dashboard -> Runs -> Metrics tab.\")\n\
+          \n    return embedding_auc\n\n"
         env:
         - name: HOME
           value: /tmp
@@ -650,44 +654,44 @@ deploymentSpec:
           \ *\n\ndef extract_embeddings(\n    work_dir:    str,\n    model_path: \
           \ str  = \"models/decoder-foundation-model\",\n    force_rerun: bool = False,\n\
           ) -> str:\n    \"\"\"Extract 512-d last-token embeddings from the decoder\
-          \ model.\n\n    True decorated component \u2014 calls src/ directly.\n \
-          \   Contrast with nemo_tfm_pipeline.py which uses papermill to run the\n\
-          \    equivalent notebook (04_inference_embedding_extraction.ipynb).\n\n\
-          \    Runs GPU-accelerated cuDF tokenisation + HuggingFaceDecoderInference\n\
-          \    batch inference for all three splits:\n      - train:  balanced ~1M\
-          \ sample (10% fraud, seed=42, matching notebook 05)\n      - val:    100K\
-          \ stratified subset from val_eval.parquet\n      - test:   100K stratified\
-          \ subset from test_eval.parquet\n\n    Row IDs are preserved before preprocess()\
-          \ sorts by user/card/time, so\n    raw feature alignment in evaluate_fraud_detection\
-          \ is exact.\n\n    LFS smudge logic: if models/decoder-foundation-model/\
-          \ contains pointer\n    files (133-byte git-lfs stubs rather than real safetensors),\
-          \ the real\n    blobs are fetched from GitHub LFS automatically before inference.\
-          \ This\n    logic is copied verbatim from inference_embedding_extraction\
-          \ in\n    nemo_tfm_pipeline.py so behaviour is identical in both pipelines.\n\
-          \n    Better than papermill: model_path is an explicit typed input \u2014\
-          \ if you\n    evaluate a different checkpoint the decision is recorded in\
-          \ the run's\n    lineage. The papermill version buries the model path in\
-          \ a notebook cell.\n\n    Parameters\n    ----------\n    work_dir   : str\
-          \ \u2014 repo root on the shared PVC\n    model_path : str \u2014 relative\
-          \ or absolute path to the model checkpoint.\n                       Default:\
-          \ models/decoder-foundation-model/ (Git LFS,\n                       3000-step\
-          \ NVIDIA checkpoint). In both demo and train\n                       modes\
-          \ this default is used \u2014 training output is separate.\n\n    Returns\n\
-          \    -------\n    str\n        Absolute path to data/embeddings/ on the\
-          \ shared PVC.\n    \"\"\"\n    import glob\n    import json\n    import\
-          \ os\n    import sys\n    import subprocess\n    import time\n\n    import\
-          \ numpy as np\n\n    # True decorated component \u2014 calls src/ directly.\n\
-          \    sys.path.insert(0, work_dir)\n    os.environ[\"HOME\"] = \"/tmp\"\n\
-          \n    # Resolve model_path relative to work_dir if not absolute\n    if\
-          \ not os.path.isabs(model_path):\n        model_path = os.path.join(work_dir,\
-          \ model_path)\n\n    if force_rerun:\n        import shutil\n        embed_dir_to_clear\
-          \ = os.path.join(work_dir, \"data\", \"embeddings\")\n        if os.path.exists(embed_dir_to_clear):\n\
-          \            shutil.rmtree(embed_dir_to_clear)\n            os.makedirs(embed_dir_to_clear,\
-          \ exist_ok=True)\n            print(\"force_rerun=True \u2014 cleared existing\
+          \ model.\n\n    True decorated component -- calls src/ directly.\n    Contrast\
+          \ with nemo_tfm_pipeline.py which uses papermill to run the\n    equivalent\
+          \ notebook (04_inference_embedding_extraction.ipynb).\n\n    Runs GPU-accelerated\
+          \ cuDF tokenisation + HuggingFaceDecoderInference\n    batch inference for\
+          \ all three splits:\n      - train:  balanced ~1M sample (10% fraud, seed=42,\
+          \ matching notebook 05)\n      - val:    100K stratified subset from val_eval.parquet\n\
+          \      - test:   100K stratified subset from test_eval.parquet\n\n    Row\
+          \ IDs are preserved before preprocess() sorts by user/card/time, so\n  \
+          \  raw feature alignment in evaluate_fraud_detection is exact.\n\n    LFS\
+          \ smudge logic: if models/decoder-foundation-model/ contains pointer\n \
+          \   files (133-byte git-lfs stubs rather than real safetensors), the real\n\
+          \    blobs are fetched from GitHub LFS automatically before inference. This\n\
+          \    logic is copied verbatim from inference_embedding_extraction in\n \
+          \   nemo_tfm_pipeline.py so behaviour is identical in both pipelines.\n\n\
+          \    Better than papermill: model_path is an explicit typed input -- if\
+          \ you\n    evaluate a different checkpoint the decision is recorded in the\
+          \ run's\n    lineage. The papermill version buries the model path in a notebook\
+          \ cell.\n\n    Parameters\n    ----------\n    work_dir   : str -- repo\
+          \ root on the shared PVC\n    model_path : str -- relative or absolute path\
+          \ to the model checkpoint.\n                       Default: models/decoder-foundation-model/\
+          \ (Git LFS,\n                       3000-step NVIDIA checkpoint). In both\
+          \ demo and train\n                       modes this default is used -- training\
+          \ output is separate.\n\n    Returns\n    -------\n    str\n        Absolute\
+          \ path to data/embeddings/ on the shared PVC.\n    \"\"\"\n    import glob\n\
+          \    import json\n    import os\n    import sys\n    import subprocess\n\
+          \    import time\n\n    import numpy as np\n\n    # True decorated component\
+          \ -- calls src/ directly.\n    sys.path.insert(0, work_dir)\n    os.environ[\"\
+          HOME\"] = \"/tmp\"\n\n    # Resolve model_path relative to work_dir if not\
+          \ absolute\n    if not os.path.isabs(model_path):\n        model_path =\
+          \ os.path.join(work_dir, model_path)\n\n    if force_rerun:\n        import\
+          \ shutil\n        embed_dir_to_clear = os.path.join(work_dir, \"data\",\
+          \ \"embeddings\")\n        if os.path.exists(embed_dir_to_clear):\n    \
+          \        shutil.rmtree(embed_dir_to_clear)\n            os.makedirs(embed_dir_to_clear,\
+          \ exist_ok=True)\n            print(\"force_rerun=True -- cleared existing\
           \ embeddings\")\n\n    # ------------------------------------------------------------------\n\
           \    # LFS smudge: detect pointer files and download real safetensors blobs.\n\
           \    # Copied verbatim from inference_embedding_extraction in nemo_tfm_pipeline.py\n\
-          \    # \u2014 behaviour is identical in both pipelines. Do not modify independently.\n\
+          \    # -- behaviour is identical in both pipelines. Do not modify independently.\n\
           \    # ------------------------------------------------------------------\n\
           \    LFS_REPO = (\n        \"https://github.com/robbybrodie/\"\n       \
           \ \"transaction-foundation-model-openshiftai.git\"\n    )\n    for model_file\
@@ -737,10 +741,10 @@ deploymentSpec:
           \ f\"{split}_row_ids.npy\")\n\n        if os.path.exists(embed_path) and\
           \ os.path.exists(label_path):\n            emb = np.load(embed_path)\n \
           \           lbl = np.load(label_path)\n            print(f\"[{split}] Already\
-          \ extracted: {emb.shape}, {lbl.sum():,} fraud \u2014 skipping\")\n     \
-          \       all_embeddings.append(emb)\n            all_labels.append(lbl)\n\
-          \            split_sizes[split] = len(emb)\n            continue\n\n   \
-          \     parquet_path = os.path.join(temporal_dir, split_to_parquet[split])\n\
+          \ extracted: {emb.shape}, {lbl.sum():,} fraud -- skipping\")\n         \
+          \   all_embeddings.append(emb)\n            all_labels.append(lbl)\n   \
+          \         split_sizes[split] = len(emb)\n            continue\n\n      \
+          \  parquet_path = os.path.join(temporal_dir, split_to_parquet[split])\n\
           \        print(f\"\\n{'='*60}\\nExtracting {split} embeddings\\n{'='*60}\"\
           )\n\n        t0  = time.time()\n        gdf = cudf.read_parquet(parquet_path)\n\
           \n        # Extract labels before preprocess() renames columns\n       \
@@ -751,10 +755,10 @@ deploymentSpec:
           \ == \"1\")).astype(int).values\n                else:\n               \
           \     labels = lbl_series.astype(int).values\n                print(f\"\
           \  Labels from '{col}': {labels.sum():,} fraud / {len(labels):,}\")\n  \
-          \              break\n\n        # Balanced sampling for train \u2014 must\
-          \ match notebook 05 (deterministic seed)\n        if split == \"train\"\
-          \ and labels is not None:\n            fraud_idx  = np.where(labels == 1)[0]\n\
-          \            normal_idx = np.where(labels == 0)[0]\n            np.random.seed(42)\n\
+          \              break\n\n        # Balanced sampling for train -- must match\
+          \ notebook 05 (deterministic seed)\n        if split == \"train\" and labels\
+          \ is not None:\n            fraud_idx  = np.where(labels == 1)[0]\n    \
+          \        normal_idx = np.where(labels == 0)[0]\n            np.random.seed(42)\n\
           \            n_fraud  = min(len(fraud_idx),  int(BALANCED_TRAIN_SIZE * 0.1))\n\
           \            n_normal = min(len(normal_idx), BALANCED_TRAIN_SIZE - n_fraud)\n\
           \            sampled  = np.concatenate([\n                np.random.choice(fraud_idx,\
@@ -840,44 +844,44 @@ deploymentSpec:
           \ *\n\ndef extract_embeddings(\n    work_dir:    str,\n    model_path: \
           \ str  = \"models/decoder-foundation-model\",\n    force_rerun: bool = False,\n\
           ) -> str:\n    \"\"\"Extract 512-d last-token embeddings from the decoder\
-          \ model.\n\n    True decorated component \u2014 calls src/ directly.\n \
-          \   Contrast with nemo_tfm_pipeline.py which uses papermill to run the\n\
-          \    equivalent notebook (04_inference_embedding_extraction.ipynb).\n\n\
-          \    Runs GPU-accelerated cuDF tokenisation + HuggingFaceDecoderInference\n\
-          \    batch inference for all three splits:\n      - train:  balanced ~1M\
-          \ sample (10% fraud, seed=42, matching notebook 05)\n      - val:    100K\
-          \ stratified subset from val_eval.parquet\n      - test:   100K stratified\
-          \ subset from test_eval.parquet\n\n    Row IDs are preserved before preprocess()\
-          \ sorts by user/card/time, so\n    raw feature alignment in evaluate_fraud_detection\
-          \ is exact.\n\n    LFS smudge logic: if models/decoder-foundation-model/\
-          \ contains pointer\n    files (133-byte git-lfs stubs rather than real safetensors),\
-          \ the real\n    blobs are fetched from GitHub LFS automatically before inference.\
-          \ This\n    logic is copied verbatim from inference_embedding_extraction\
-          \ in\n    nemo_tfm_pipeline.py so behaviour is identical in both pipelines.\n\
-          \n    Better than papermill: model_path is an explicit typed input \u2014\
-          \ if you\n    evaluate a different checkpoint the decision is recorded in\
-          \ the run's\n    lineage. The papermill version buries the model path in\
-          \ a notebook cell.\n\n    Parameters\n    ----------\n    work_dir   : str\
-          \ \u2014 repo root on the shared PVC\n    model_path : str \u2014 relative\
-          \ or absolute path to the model checkpoint.\n                       Default:\
-          \ models/decoder-foundation-model/ (Git LFS,\n                       3000-step\
-          \ NVIDIA checkpoint). In both demo and train\n                       modes\
-          \ this default is used \u2014 training output is separate.\n\n    Returns\n\
-          \    -------\n    str\n        Absolute path to data/embeddings/ on the\
-          \ shared PVC.\n    \"\"\"\n    import glob\n    import json\n    import\
-          \ os\n    import sys\n    import subprocess\n    import time\n\n    import\
-          \ numpy as np\n\n    # True decorated component \u2014 calls src/ directly.\n\
-          \    sys.path.insert(0, work_dir)\n    os.environ[\"HOME\"] = \"/tmp\"\n\
-          \n    # Resolve model_path relative to work_dir if not absolute\n    if\
-          \ not os.path.isabs(model_path):\n        model_path = os.path.join(work_dir,\
-          \ model_path)\n\n    if force_rerun:\n        import shutil\n        embed_dir_to_clear\
-          \ = os.path.join(work_dir, \"data\", \"embeddings\")\n        if os.path.exists(embed_dir_to_clear):\n\
-          \            shutil.rmtree(embed_dir_to_clear)\n            os.makedirs(embed_dir_to_clear,\
-          \ exist_ok=True)\n            print(\"force_rerun=True \u2014 cleared existing\
+          \ model.\n\n    True decorated component -- calls src/ directly.\n    Contrast\
+          \ with nemo_tfm_pipeline.py which uses papermill to run the\n    equivalent\
+          \ notebook (04_inference_embedding_extraction.ipynb).\n\n    Runs GPU-accelerated\
+          \ cuDF tokenisation + HuggingFaceDecoderInference\n    batch inference for\
+          \ all three splits:\n      - train:  balanced ~1M sample (10% fraud, seed=42,\
+          \ matching notebook 05)\n      - val:    100K stratified subset from val_eval.parquet\n\
+          \      - test:   100K stratified subset from test_eval.parquet\n\n    Row\
+          \ IDs are preserved before preprocess() sorts by user/card/time, so\n  \
+          \  raw feature alignment in evaluate_fraud_detection is exact.\n\n    LFS\
+          \ smudge logic: if models/decoder-foundation-model/ contains pointer\n \
+          \   files (133-byte git-lfs stubs rather than real safetensors), the real\n\
+          \    blobs are fetched from GitHub LFS automatically before inference. This\n\
+          \    logic is copied verbatim from inference_embedding_extraction in\n \
+          \   nemo_tfm_pipeline.py so behaviour is identical in both pipelines.\n\n\
+          \    Better than papermill: model_path is an explicit typed input -- if\
+          \ you\n    evaluate a different checkpoint the decision is recorded in the\
+          \ run's\n    lineage. The papermill version buries the model path in a notebook\
+          \ cell.\n\n    Parameters\n    ----------\n    work_dir   : str -- repo\
+          \ root on the shared PVC\n    model_path : str -- relative or absolute path\
+          \ to the model checkpoint.\n                       Default: models/decoder-foundation-model/\
+          \ (Git LFS,\n                       3000-step NVIDIA checkpoint). In both\
+          \ demo and train\n                       modes this default is used -- training\
+          \ output is separate.\n\n    Returns\n    -------\n    str\n        Absolute\
+          \ path to data/embeddings/ on the shared PVC.\n    \"\"\"\n    import glob\n\
+          \    import json\n    import os\n    import sys\n    import subprocess\n\
+          \    import time\n\n    import numpy as np\n\n    # True decorated component\
+          \ -- calls src/ directly.\n    sys.path.insert(0, work_dir)\n    os.environ[\"\
+          HOME\"] = \"/tmp\"\n\n    # Resolve model_path relative to work_dir if not\
+          \ absolute\n    if not os.path.isabs(model_path):\n        model_path =\
+          \ os.path.join(work_dir, model_path)\n\n    if force_rerun:\n        import\
+          \ shutil\n        embed_dir_to_clear = os.path.join(work_dir, \"data\",\
+          \ \"embeddings\")\n        if os.path.exists(embed_dir_to_clear):\n    \
+          \        shutil.rmtree(embed_dir_to_clear)\n            os.makedirs(embed_dir_to_clear,\
+          \ exist_ok=True)\n            print(\"force_rerun=True -- cleared existing\
           \ embeddings\")\n\n    # ------------------------------------------------------------------\n\
           \    # LFS smudge: detect pointer files and download real safetensors blobs.\n\
           \    # Copied verbatim from inference_embedding_extraction in nemo_tfm_pipeline.py\n\
-          \    # \u2014 behaviour is identical in both pipelines. Do not modify independently.\n\
+          \    # -- behaviour is identical in both pipelines. Do not modify independently.\n\
           \    # ------------------------------------------------------------------\n\
           \    LFS_REPO = (\n        \"https://github.com/robbybrodie/\"\n       \
           \ \"transaction-foundation-model-openshiftai.git\"\n    )\n    for model_file\
@@ -927,10 +931,10 @@ deploymentSpec:
           \ f\"{split}_row_ids.npy\")\n\n        if os.path.exists(embed_path) and\
           \ os.path.exists(label_path):\n            emb = np.load(embed_path)\n \
           \           lbl = np.load(label_path)\n            print(f\"[{split}] Already\
-          \ extracted: {emb.shape}, {lbl.sum():,} fraud \u2014 skipping\")\n     \
-          \       all_embeddings.append(emb)\n            all_labels.append(lbl)\n\
-          \            split_sizes[split] = len(emb)\n            continue\n\n   \
-          \     parquet_path = os.path.join(temporal_dir, split_to_parquet[split])\n\
+          \ extracted: {emb.shape}, {lbl.sum():,} fraud -- skipping\")\n         \
+          \   all_embeddings.append(emb)\n            all_labels.append(lbl)\n   \
+          \         split_sizes[split] = len(emb)\n            continue\n\n      \
+          \  parquet_path = os.path.join(temporal_dir, split_to_parquet[split])\n\
           \        print(f\"\\n{'='*60}\\nExtracting {split} embeddings\\n{'='*60}\"\
           )\n\n        t0  = time.time()\n        gdf = cudf.read_parquet(parquet_path)\n\
           \n        # Extract labels before preprocess() renames columns\n       \
@@ -941,10 +945,10 @@ deploymentSpec:
           \ == \"1\")).astype(int).values\n                else:\n               \
           \     labels = lbl_series.astype(int).values\n                print(f\"\
           \  Labels from '{col}': {labels.sum():,} fraud / {len(labels):,}\")\n  \
-          \              break\n\n        # Balanced sampling for train \u2014 must\
-          \ match notebook 05 (deterministic seed)\n        if split == \"train\"\
-          \ and labels is not None:\n            fraud_idx  = np.where(labels == 1)[0]\n\
-          \            normal_idx = np.where(labels == 0)[0]\n            np.random.seed(42)\n\
+          \              break\n\n        # Balanced sampling for train -- must match\
+          \ notebook 05 (deterministic seed)\n        if split == \"train\" and labels\
+          \ is not None:\n            fraud_idx  = np.where(labels == 1)[0]\n    \
+          \        normal_idx = np.where(labels == 0)[0]\n            np.random.seed(42)\n\
           \            n_fraud  = min(len(fraud_idx),  int(BALANCED_TRAIN_SIZE * 0.1))\n\
           \            n_normal = min(len(normal_idx), BALANCED_TRAIN_SIZE - n_fraud)\n\
           \            sampled  = np.concatenate([\n                np.random.choice(fraud_idx,\
@@ -1029,7 +1033,7 @@ deploymentSpec:
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
           \ *\n\ndef tokenize_transactions(work_dir: str, force_rerun: bool = False)\
           \ -> str:\n    \"\"\"Run the GPU-accelerated financial tokeniser and write\
-          \ text corpora.\n\n    True decorated component \u2014 calls src/ directly.\n\
+          \ text corpora.\n\n    True decorated component -- calls src/ directly.\n\
           \    Contrast with nemo_tfm_pipeline.py which uses papermill to run the\n\
           \    equivalent notebook (02_seq_preproc_tokenization.ipynb).\n\n    Reads\
           \ the temporal splits from data/TabFormer/temporal_split/ (produced\n  \
@@ -1045,15 +1049,15 @@ deploymentSpec:
           \ wherever\n    the cell says, with no typed contract visible to downstream\
           \ steps.\n\n    Returns\n    -------\n    str\n        Absolute path to\
           \ data/decoder_corpus/ on the shared PVC.\n    \"\"\"\n    import os\n \
-          \   import sys\n    import time\n\n    # True decorated component \u2014\
-          \ calls src/ directly.\n    sys.path.insert(0, work_dir)\n    os.environ[\"\
-          HOME\"] = \"/tmp\"\n\n    import cudf\n    from src.tokenizer import FinancialTokenizerPipeline\n\
+          \   import sys\n    import time\n\n    # True decorated component -- calls\
+          \ src/ directly.\n    sys.path.insert(0, work_dir)\n    os.environ[\"HOME\"\
+          ] = \"/tmp\"\n\n    import cudf\n    from src.tokenizer import FinancialTokenizerPipeline\n\
           \n    MERCHANT_HASH_SIZE = 2000\n    CHUNK_SIZE = 315  # ~4096 tokens at\
           \ 12 tokens/txn + separators\n\n    temporal_dir = os.path.join(work_dir,\
           \ \"data\", \"TabFormer\", \"temporal_split\")\n    corpus_dir   = os.path.join(work_dir,\
           \ \"data\", \"decoder_corpus\")\n\n    if force_rerun and os.path.exists(corpus_dir):\n\
           \        import shutil\n        shutil.rmtree(corpus_dir)\n        print(\"\
-          force_rerun=True \u2014 cleared existing corpus\")\n\n    os.makedirs(corpus_dir,\
+          force_rerun=True -- cleared existing corpus\")\n\n    os.makedirs(corpus_dir,\
           \ exist_ok=True)\n\n    splits = [\n        (\"train\", os.path.join(temporal_dir,\
           \ \"train.parquet\"),\n                  os.path.join(corpus_dir, \"train_corpus.txt\"\
           )),\n        (\"val\",   os.path.join(temporal_dir, \"val.parquet\"),\n\
@@ -1062,7 +1066,7 @@ deploymentSpec:
           \           os.path.join(corpus_dir, \"test_corpus.txt\")),\n    ]\n\n \
           \   for split_name, parquet_path, corpus_path in splits:\n        if os.path.exists(corpus_path):\n\
           \            n_lines = sum(1 for _ in open(corpus_path))\n            print(f\"\
-          [{split_name}] Corpus already exists: {n_lines:,} sequences \u2014 skipping\"\
+          [{split_name}] Corpus already exists: {n_lines:,} sequences -- skipping\"\
           )\n            continue\n\n        print(f\"\\n{'='*60}\")\n        print(f\"\
           Generating corpus for {split_name}\")\n        print(f\"{'='*60}\")\n\n\
           \        t0 = time.time()\n        gdf = cudf.read_parquet(parquet_path)\n\
@@ -1081,7 +1085,7 @@ deploymentSpec:
           \     )\n\n        with open(corpus_path, \"w\") as f:\n            for\
           \ line in corpus_lines:\n                f.write(line + \"\\n\")\n\n   \
           \     elapsed = time.time() - t0\n        print(f\"  Generated {len(corpus_lines):,}\
-          \ sequences in {elapsed:.1f}s\")\n        print(f\"  Saved \u2192 {corpus_path}\"\
+          \ sequences in {elapsed:.1f}s\")\n        print(f\"  Saved -> {corpus_path}\"\
           )\n\n    return corpus_dir\n\n"
         env:
         - name: HOME
@@ -1127,46 +1131,45 @@ deploymentSpec:
           \  str,\n    config_path: str  = \"configs/pretrain_financial_decoder.yaml\"\
           ,\n    max_steps:   int  = 30,\n    force_rerun: bool = False,\n) -> str:\n\
           \    \"\"\"Run NeMo decoder pretraining via torchrun.\n\n    True decorated\
-          \ component \u2014 calls src/ directly.\n    Contrast with nemo_tfm_pipeline.py\
+          \ component -- calls src/ directly.\n    Contrast with nemo_tfm_pipeline.py\
           \ which uses papermill to run the\n    equivalent notebook (03_foundation_model_training.ipynb).\n\
           \n    Wraps torchrun --nproc-per-node=1 around scripts/train_decoder_model.py,\n\
           \    passing the supplied YAML config and max_steps override. Single-GPU\
           \ inside\n    the KFP component container. For multi-node distributed training,\
           \ use\n    openshift/training/pytorchjob.yaml (KFTO PyTorchJob) instead\
-          \ \u2014 the KFP\n    pipeline can submit a PyTorchJob and poll for completion\
+          \ -- the KFP\n    pipeline can submit a PyTorchJob and poll for completion\
           \ via the\n    Kubernetes client (documented as a future enhancement).\n\
           \n    corpus_dir is an explicit typed input derived from tokenize_transactions.\n\
           \    The data dependency ensures this component waits for tokenization to\n\
-          \    complete before launching training \u2014 the corpus files must exist\
-          \ before\n    the NeMo dataloader opens them.\n\n    Better than papermill:\
-          \ max_steps is a typed pipeline parameter recorded in\n    the KFP metadata\
-          \ store. You can compare runs and see exactly how many steps\n    each training\
+          \    complete before launching training -- the corpus files must exist before\n\
+          \    the NeMo dataloader opens them.\n\n    Better than papermill: max_steps\
+          \ is a typed pipeline parameter recorded in\n    the KFP metadata store.\
+          \ You can compare runs and see exactly how many steps\n    each training\
           \ run executed, not just \"notebook 03 ran.\"\n\n    Parameters\n    ----------\n\
-          \    work_dir    : str  \u2014 repo root on the shared PVC\n    corpus_dir\
-          \  : str  \u2014 path returned by tokenize_transactions (data dependency)\n\
-          \    config_path : str  \u2014 path to NeMo YAML config, relative to work_dir\n\
-          \    max_steps   : int  \u2014 training steps (30 = demo, increase for real\
+          \    work_dir    : str  -- repo root on the shared PVC\n    corpus_dir \
+          \ : str  -- path returned by tokenize_transactions (data dependency)\n \
+          \   config_path : str  -- path to NeMo YAML config, relative to work_dir\n\
+          \    max_steps   : int  -- training steps (30 = demo, increase for real\
           \ training)\n\n    Returns\n    -------\n    str\n        Absolute path\
           \ to models/decoder-demo/checkpoints/ on the shared PVC.\n    \"\"\"\n \
           \   import os\n    import sys\n    import subprocess\n\n    # True decorated\
-          \ component \u2014 calls src/ directly.\n    sys.path.insert(0, work_dir)\n\
+          \ component -- calls src/ directly.\n    sys.path.insert(0, work_dir)\n\
           \    os.environ[\"HOME\"] = \"/tmp\"\n\n    if force_rerun:\n        import\
           \ shutil\n        checkpoint_dir_to_clear = os.path.join(work_dir, \"models\"\
           , \"decoder-demo\")\n        if os.path.exists(checkpoint_dir_to_clear):\n\
           \            shutil.rmtree(checkpoint_dir_to_clear)\n            print(\"\
-          force_rerun=True \u2014 cleared existing decoder-demo checkpoint\")\n\n\
-          \    abs_config   = os.path.join(work_dir, config_path)\n    train_script\
-          \ = os.path.join(work_dir, \"scripts\", \"train_decoder_model.py\")\n  \
-          \  train_corpus = os.path.join(corpus_dir, \"train_corpus.txt\")\n    val_corpus\
-          \   = os.path.join(corpus_dir, \"val_corpus.txt\")\n\n    print(f\"NeMo\
-          \ pretraining: max_steps={max_steps}\")\n    print(f\"  Config:        \
-          \ {abs_config}\")\n    print(f\"  Train corpus:   {train_corpus}\")\n  \
-          \  print(f\"  Val corpus:     {val_corpus}\")\n\n    env = os.environ.copy()\n\
-          \    env[\"PYTHONPATH\"] = work_dir + \":\" + env.get(\"PYTHONPATH\", \"\
-          \")\n\n    cmd = [\n        \"torchrun\", \"--nproc-per-node=1\",\n    \
-          \    train_script,\n        \"-c\", abs_config,\n        f\"--dataset.data_path={train_corpus}\"\
-          ,\n        f\"--validation_dataset.data_path={val_corpus}\",\n        f\"\
-          --step_scheduler.max_steps={max_steps}\",\n    ]\n\n    subprocess.run(cmd,\
+          force_rerun=True -- cleared existing decoder-demo checkpoint\")\n\n    abs_config\
+          \   = os.path.join(work_dir, config_path)\n    train_script = os.path.join(work_dir,\
+          \ \"scripts\", \"train_decoder_model.py\")\n    train_corpus = os.path.join(corpus_dir,\
+          \ \"train_corpus.txt\")\n    val_corpus   = os.path.join(corpus_dir, \"\
+          val_corpus.txt\")\n\n    print(f\"NeMo pretraining: max_steps={max_steps}\"\
+          )\n    print(f\"  Config:         {abs_config}\")\n    print(f\"  Train\
+          \ corpus:   {train_corpus}\")\n    print(f\"  Val corpus:     {val_corpus}\"\
+          )\n\n    env = os.environ.copy()\n    env[\"PYTHONPATH\"] = work_dir + \"\
+          :\" + env.get(\"PYTHONPATH\", \"\")\n\n    cmd = [\n        \"torchrun\"\
+          , \"--nproc-per-node=1\",\n        train_script,\n        \"-c\", abs_config,\n\
+          \        f\"--dataset.data_path={train_corpus}\",\n        f\"--validation_dataset.data_path={val_corpus}\"\
+          ,\n        f\"--step_scheduler.max_steps={max_steps}\",\n    ]\n\n    subprocess.run(cmd,\
           \ check=True, cwd=work_dir, env=env)\n\n    checkpoint_dir = os.path.join(work_dir,\
           \ \"models\", \"decoder-demo\", \"checkpoints\")\n    print(f\"Training\
           \ complete. Checkpoint dir: {checkpoint_dir}\")\n    return checkpoint_dir\n\
@@ -1186,8 +1189,8 @@ deploymentSpec:
           resourceCpuRequest: '8'
           resourceMemoryRequest: 64G
 pipelineInfo:
-  description: "Decorated KFP v2 pipeline \u2014 typed I/O components calling src/\
-    \ directly. Contrast with nemo-transaction-foundation-model (papermill version)."
+  description: Decorated KFP v2 pipeline -- typed I/O components calling src/ directly.
+    Contrast with nemo-transaction-foundation-model (papermill version).
   name: nemo-tfm-foundation-model-decorated
 root:
   dag:
@@ -1231,9 +1234,13 @@ root:
     parameters:
       force_rerun:
         defaultValue: false
-        description: "if present \u2014 makes repeated demo runs fast.\nTrue: clear\
-          \ and regenerate all intermediate outputs.\nAlways set True for train mode\
-          \ to avoid stale demo\nartifacts contaminating results."
+        description: 'if present -- makes repeated demo runs fast.
+
+          True: clear and regenerate all intermediate outputs.
+
+          Always set True for train mode to avoid stale demo
+
+          artifacts contaminating results.'
         isOptional: true
         parameterType: BOOLEAN
       max_steps:

@@ -19,11 +19,11 @@ Uses true decorated components from components_decorated.py instead of
 papermill-wrapped notebook calls.  Contrast with nemo_tfm_pipeline.py.
 
 Why both pipelines exist:
-  nemo_tfm_pipeline.py              — production-proven papermill pipeline.
+  nemo_tfm_pipeline.py              -- production-proven papermill pipeline.
                                       Notebooks ARE the pipeline steps.
                                       Zero refactoring required.
 
-  components_decorated.py +         — demonstrates the next evolution step:
+  components_decorated.py +         -- demonstrates the next evolution step:
   foundation_model_pipeline_         typed I/O contracts, fine-grained GPU
   decorated.py                       allocation, KFP metadata store audit trail,
                                       and independent component testability.
@@ -34,19 +34,19 @@ the maturity ladder, and the regulatory-defensibility argument.
 Pipeline modes
 --------------
 mode="demo"  (default)
-    s1 → s3d → s4d
+    s1 -> s3d -> s4d
     Tokenise, extract embeddings from the Git LFS checkpoint, evaluate.
     Training is skipped. Completes in ~20-30 min on an L4 GPU.
 
 mode="train"
-    s1 → s2 → s3t → s4t
+    s1 -> s2 -> s3t -> s4t
     Tokenise, then train a 30-step demo model before extracting embeddings
     and evaluating.  s3t uses the Git LFS checkpoint, not the 30-step output.
 
 Compile to YAML by running this file directly:
 
     python pipeline/foundation_model_pipeline_decorated.py
-    # → pipeline/foundation_model_pipeline_decorated.yaml
+    # -> pipeline/foundation_model_pipeline_decorated.yaml
 """
 
 from kfp import dsl, compiler
@@ -60,7 +60,7 @@ from components_decorated import (
 )
 
 # ---------------------------------------------------------------------------
-# Image and storage — must match what's deployed in OpenShift
+# Image and storage -- must match what's deployed in OpenShift
 # ---------------------------------------------------------------------------
 IMAGE    = "image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest"
 PVC_NAME = "nemo-tfm-workbench-data"
@@ -68,7 +68,7 @@ WORK_DIR = "/opt/app-root/src/nemo-tfm"
 
 PIPELINE_NAME        = "nemo-tfm-foundation-model-decorated"
 PIPELINE_DESCRIPTION = (
-    "Decorated KFP v2 pipeline — typed I/O components calling src/ directly. "
+    "Decorated KFP v2 pipeline -- typed I/O components calling src/ directly. "
     "Contrast with nemo-transaction-foundation-model (papermill version)."
 )
 
@@ -80,7 +80,7 @@ PIPELINE_DESCRIPTION = (
 
 def _configure_task(task):
     """Mount PVC, set HOME, disable caching, pin to GPU node."""
-    # Mount the PVC at /opt/app-root/src — the same mount point used by the
+    # Mount the PVC at /opt/app-root/src -- the same mount point used by the
     # workbench pod.  The repo is cloned to nemo-tfm/ within the PVC, so
     # notebooks resolve correctly at WORK_DIR = /opt/app-root/src/nemo-tfm.
     kubernetes.mount_pvc(task, pvc_name=PVC_NAME, mount_path="/opt/app-root/src")
@@ -88,11 +88,11 @@ def _configure_task(task):
     # always writable, fixing both the launcher bootstrap and any %pip install
     # cells inside the notebooks.
     task.set_env_variable("HOME", "/tmp")
-    # Disable KFP caching — components write results to the shared PVC so every
+    # Disable KFP caching -- components write results to the shared PVC so every
     # run should execute all steps rather than silently reusing stale outputs.
     task.set_caching_options(enable_caching=False)
     # Pin every pipeline step to the same GPU node as the workbench.
-    # The shared PVC is EBS ReadWriteOnce — it can only attach to one node at
+    # The shared PVC is EBS ReadWriteOnce -- it can only attach to one node at
     # a time.  The workbench's nodeSelector uses the same label, so both land
     # on the same node regardless of cluster topology.
     kubernetes.add_node_selector(
@@ -119,26 +119,26 @@ def foundation_model_pipeline_decorated(
 
     Parameters
     ----------
-    work_dir    : str  — absolute path to the cloned repo on the shared PVC.
-    mode        : str  — "demo" (default, skip training, ~20-30 min on L4)
+    work_dir    : str  -- absolute path to the cloned repo on the shared PVC.
+    mode        : str  -- "demo" (default, skip training, ~20-30 min on L4)
                          or "train" (all steps including NeMo pretraining).
-    model_path  : str  — path to model checkpoint for embedding extraction.
+    model_path  : str  -- path to model checkpoint for embedding extraction.
                          Default: models/decoder-foundation-model/ (Git LFS,
                          3000-step NVIDIA checkpoint). Relative paths are
                          resolved from work_dir inside extract_embeddings.
-    max_steps   : int  — training steps; only used when mode="train".
+    max_steps   : int  -- training steps; only used when mode="train".
                          30   = demo capability proof (fast).
                          500+ = meaningful training.
                          3000 = full NVIDIA equivalent (use H200s).
-    force_rerun : bool — False (default): reuse existing corpus/embeddings
-                         if present — makes repeated demo runs fast.
+    force_rerun : bool -- False (default): reuse existing corpus/embeddings
+                         if present -- makes repeated demo runs fast.
                          True: clear and regenerate all intermediate outputs.
                          Always set True for train mode to avoid stale demo
                          artifacts contaminating results.
     """
 
     # ------------------------------------------------------------------
-    # Step 1: tokenize_transactions — always runs in both modes.
+    # Step 1: tokenize_transactions -- always runs in both modes.
     # Replaces: papermill on 02_seq_preproc_tokenization.ipynb
     # Returns: corpus_dir (data/decoder_corpus/)
     # ------------------------------------------------------------------
@@ -148,15 +148,15 @@ def foundation_model_pipeline_decorated(
     _configure_task(s1)
 
     # ------------------------------------------------------------------
-    # TRAIN MODE: s1 → s2 → s3t → s4t
+    # TRAIN MODE: s1 -> s2 -> s3t -> s4t
     # Wrap the full tail so GPU steps remain strictly sequential inside
-    # the branch — critical for the EBS ReadWriteOnce PVC constraint.
+    # the branch -- critical for the EBS ReadWriteOnce PVC constraint.
     # ------------------------------------------------------------------
     with dsl.If(mode == "train", name="train-mode"):
 
         # Step 2t: train_foundation_model
         # corpus_dir is an explicit typed input (data dependency on s1).
-        # The KFP metadata store records max_steps for every run — you can
+        # The KFP metadata store records max_steps for every run -- you can
         # compare runs and see exactly how many steps each executed.
         # Replaces: papermill on 03_foundation_model_training.ipynb
         s2t = train_foundation_model(
@@ -170,8 +170,8 @@ def foundation_model_pipeline_decorated(
         _configure_task(s2t)
 
         # Step 3t: extract_embeddings
-        # model_path defaults to the Git LFS 3000-step checkpoint — NOT
-        # the 30-step output — so the accuracy story is consistent.
+        # model_path defaults to the Git LFS 3000-step checkpoint -- NOT
+        # the 30-step output -- so the accuracy story is consistent.
         # .after(s2t) is redundant here (KFP infers from s2t.output) but
         # is explicit to document the intended GPU serialisation.
         # Replaces: papermill on 04_inference_embedding_extraction.ipynb
@@ -185,8 +185,8 @@ def foundation_model_pipeline_decorated(
         s3t.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
         _configure_task(s3t)
 
-        # Step 4t: evaluate_fraud_detection — CPU only (no set_accelerator_type).
-        # metrics: Output[Metrics] is injected by KFP — do not pass it.
+        # Step 4t: evaluate_fraud_detection -- CPU only (no set_accelerator_type).
+        # metrics: Output[Metrics] is injected by KFP -- do not pass it.
         # lift_pct is the headline number for Demonstration 3.
         # Replaces: papermill on 05_xgboost_fraud_detection.ipynb
         s4t = evaluate_fraud_detection(
@@ -197,15 +197,15 @@ def foundation_model_pipeline_decorated(
         _configure_task(s4t)
 
     # ------------------------------------------------------------------
-    # DEMO MODE: s1 → s3d → s4d  (training skipped)
+    # DEMO MODE: s1 -> s3d -> s4d  (training skipped)
     # extract_embeddings uses the Git LFS checkpoint directly.
-    # .after(s1) enforces GPU serialisation — s3d must wait for s1's
+    # .after(s1) enforces GPU serialisation -- s3d must wait for s1's
     # GPU to be released before requesting its own, even though s3d
     # does not consume s1's typed output.
     # ------------------------------------------------------------------
     with dsl.Else(name="demo-mode"):
 
-        # Step 3d: extract_embeddings — uses Git LFS checkpoint
+        # Step 3d: extract_embeddings -- uses Git LFS checkpoint
         # Replaces: papermill on 04_inference_embedding_extraction.ipynb
         s3d = extract_embeddings(
             work_dir=work_dir,
@@ -217,7 +217,7 @@ def foundation_model_pipeline_decorated(
         s3d.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
         _configure_task(s3d)
 
-        # Step 4d: evaluate_fraud_detection — CPU only.
+        # Step 4d: evaluate_fraud_detection -- CPU only.
         # Replaces: papermill on 05_xgboost_fraud_detection.ipynb
         s4d = evaluate_fraud_detection(
             work_dir=work_dir,
@@ -239,4 +239,4 @@ if __name__ == "__main__":
         "foundation_model_pipeline_decorated.yaml",
     )
     compiler.Compiler().compile(foundation_model_pipeline_decorated, output)
-    print(f"Compiled → {output}")
+    print(f"Compiled -> {output}")

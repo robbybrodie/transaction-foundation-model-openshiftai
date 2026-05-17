@@ -19,11 +19,11 @@ Each component calls src/ directly instead of running a notebook via papermill.
 Contrast with nemo_tfm_pipeline.py, which wraps each notebook in papermill.
 
 Why both pipelines exist:
-  nemo_tfm_pipeline.py              — production-proven papermill pipeline.
+  nemo_tfm_pipeline.py              -- production-proven papermill pipeline.
                                       Notebooks ARE the pipeline steps.
                                       Zero refactoring required.
 
-  components_decorated.py +         — demonstrates the next evolution step:
+  components_decorated.py +         -- demonstrates the next evolution step:
   foundation_model_pipeline_         typed I/O contracts, fine-grained GPU
   decorated.py                       allocation, KFP metadata store audit trail,
                                       and independent component testability.
@@ -34,7 +34,7 @@ the maturity ladder, and the regulatory-defensibility argument.
 
 from kfp.dsl import component, Output, Metrics
 
-# Internal registry only — no DockerHub dependency.
+# Internal registry only -- no DockerHub dependency.
 # This image is built by the BuildConfig in openshift/gitops/notebook-image/
 # and pushed to the cluster registry after ArgoCD syncs wave 2.
 IMAGE = "image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest"
@@ -49,7 +49,7 @@ IMAGE = "image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-work
 def tokenize_transactions(work_dir: str, force_rerun: bool = False) -> str:
     """Run the GPU-accelerated financial tokeniser and write text corpora.
 
-    True decorated component — calls src/ directly.
+    True decorated component -- calls src/ directly.
     Contrast with nemo_tfm_pipeline.py which uses papermill to run the
     equivalent notebook (02_seq_preproc_tokenization.ipynb).
 
@@ -77,7 +77,7 @@ def tokenize_transactions(work_dir: str, force_rerun: bool = False) -> str:
     import sys
     import time
 
-    # True decorated component — calls src/ directly.
+    # True decorated component -- calls src/ directly.
     sys.path.insert(0, work_dir)
     os.environ["HOME"] = "/tmp"
 
@@ -93,7 +93,7 @@ def tokenize_transactions(work_dir: str, force_rerun: bool = False) -> str:
     if force_rerun and os.path.exists(corpus_dir):
         import shutil
         shutil.rmtree(corpus_dir)
-        print("force_rerun=True — cleared existing corpus")
+        print("force_rerun=True -- cleared existing corpus")
 
     os.makedirs(corpus_dir, exist_ok=True)
 
@@ -109,7 +109,7 @@ def tokenize_transactions(work_dir: str, force_rerun: bool = False) -> str:
     for split_name, parquet_path, corpus_path in splits:
         if os.path.exists(corpus_path):
             n_lines = sum(1 for _ in open(corpus_path))
-            print(f"[{split_name}] Corpus already exists: {n_lines:,} sequences — skipping")
+            print(f"[{split_name}] Corpus already exists: {n_lines:,} sequences -- skipping")
             continue
 
         print(f"\n{'='*60}")
@@ -148,7 +148,7 @@ def tokenize_transactions(work_dir: str, force_rerun: bool = False) -> str:
 
         elapsed = time.time() - t0
         print(f"  Generated {len(corpus_lines):,} sequences in {elapsed:.1f}s")
-        print(f"  Saved → {corpus_path}")
+        print(f"  Saved -> {corpus_path}")
 
     return corpus_dir
 
@@ -168,20 +168,20 @@ def train_foundation_model(
 ) -> str:
     """Run NeMo decoder pretraining via torchrun.
 
-    True decorated component — calls src/ directly.
+    True decorated component -- calls src/ directly.
     Contrast with nemo_tfm_pipeline.py which uses papermill to run the
     equivalent notebook (03_foundation_model_training.ipynb).
 
     Wraps torchrun --nproc-per-node=1 around scripts/train_decoder_model.py,
     passing the supplied YAML config and max_steps override. Single-GPU inside
     the KFP component container. For multi-node distributed training, use
-    openshift/training/pytorchjob.yaml (KFTO PyTorchJob) instead — the KFP
+    openshift/training/pytorchjob.yaml (KFTO PyTorchJob) instead -- the KFP
     pipeline can submit a PyTorchJob and poll for completion via the
     Kubernetes client (documented as a future enhancement).
 
     corpus_dir is an explicit typed input derived from tokenize_transactions.
     The data dependency ensures this component waits for tokenization to
-    complete before launching training — the corpus files must exist before
+    complete before launching training -- the corpus files must exist before
     the NeMo dataloader opens them.
 
     Better than papermill: max_steps is a typed pipeline parameter recorded in
@@ -190,10 +190,10 @@ def train_foundation_model(
 
     Parameters
     ----------
-    work_dir    : str  — repo root on the shared PVC
-    corpus_dir  : str  — path returned by tokenize_transactions (data dependency)
-    config_path : str  — path to NeMo YAML config, relative to work_dir
-    max_steps   : int  — training steps (30 = demo, increase for real training)
+    work_dir    : str  -- repo root on the shared PVC
+    corpus_dir  : str  -- path returned by tokenize_transactions (data dependency)
+    config_path : str  -- path to NeMo YAML config, relative to work_dir
+    max_steps   : int  -- training steps (30 = demo, increase for real training)
 
     Returns
     -------
@@ -204,7 +204,7 @@ def train_foundation_model(
     import sys
     import subprocess
 
-    # True decorated component — calls src/ directly.
+    # True decorated component -- calls src/ directly.
     sys.path.insert(0, work_dir)
     os.environ["HOME"] = "/tmp"
 
@@ -213,7 +213,7 @@ def train_foundation_model(
         checkpoint_dir_to_clear = os.path.join(work_dir, "models", "decoder-demo")
         if os.path.exists(checkpoint_dir_to_clear):
             shutil.rmtree(checkpoint_dir_to_clear)
-            print("force_rerun=True — cleared existing decoder-demo checkpoint")
+            print("force_rerun=True -- cleared existing decoder-demo checkpoint")
 
     abs_config   = os.path.join(work_dir, config_path)
     train_script = os.path.join(work_dir, "scripts", "train_decoder_model.py")
@@ -257,7 +257,7 @@ def extract_embeddings(
 ) -> str:
     """Extract 512-d last-token embeddings from the decoder model.
 
-    True decorated component — calls src/ directly.
+    True decorated component -- calls src/ directly.
     Contrast with nemo_tfm_pipeline.py which uses papermill to run the
     equivalent notebook (04_inference_embedding_extraction.ipynb).
 
@@ -276,17 +276,17 @@ def extract_embeddings(
     logic is copied verbatim from inference_embedding_extraction in
     nemo_tfm_pipeline.py so behaviour is identical in both pipelines.
 
-    Better than papermill: model_path is an explicit typed input — if you
+    Better than papermill: model_path is an explicit typed input -- if you
     evaluate a different checkpoint the decision is recorded in the run's
     lineage. The papermill version buries the model path in a notebook cell.
 
     Parameters
     ----------
-    work_dir   : str — repo root on the shared PVC
-    model_path : str — relative or absolute path to the model checkpoint.
+    work_dir   : str -- repo root on the shared PVC
+    model_path : str -- relative or absolute path to the model checkpoint.
                        Default: models/decoder-foundation-model/ (Git LFS,
                        3000-step NVIDIA checkpoint). In both demo and train
-                       modes this default is used — training output is separate.
+                       modes this default is used -- training output is separate.
 
     Returns
     -------
@@ -302,7 +302,7 @@ def extract_embeddings(
 
     import numpy as np
 
-    # True decorated component — calls src/ directly.
+    # True decorated component -- calls src/ directly.
     sys.path.insert(0, work_dir)
     os.environ["HOME"] = "/tmp"
 
@@ -316,12 +316,12 @@ def extract_embeddings(
         if os.path.exists(embed_dir_to_clear):
             shutil.rmtree(embed_dir_to_clear)
             os.makedirs(embed_dir_to_clear, exist_ok=True)
-            print("force_rerun=True — cleared existing embeddings")
+            print("force_rerun=True -- cleared existing embeddings")
 
     # ------------------------------------------------------------------
     # LFS smudge: detect pointer files and download real safetensors blobs.
     # Copied verbatim from inference_embedding_extraction in nemo_tfm_pipeline.py
-    # — behaviour is identical in both pipelines. Do not modify independently.
+    # -- behaviour is identical in both pipelines. Do not modify independently.
     # ------------------------------------------------------------------
     LFS_REPO = (
         "https://github.com/robbybrodie/"
@@ -415,7 +415,7 @@ def extract_embeddings(
         if os.path.exists(embed_path) and os.path.exists(label_path):
             emb = np.load(embed_path)
             lbl = np.load(label_path)
-            print(f"[{split}] Already extracted: {emb.shape}, {lbl.sum():,} fraud — skipping")
+            print(f"[{split}] Already extracted: {emb.shape}, {lbl.sum():,} fraud -- skipping")
             all_embeddings.append(emb)
             all_labels.append(lbl)
             split_sizes[split] = len(emb)
@@ -439,7 +439,7 @@ def extract_embeddings(
                 print(f"  Labels from '{col}': {labels.sum():,} fraud / {len(labels):,}")
                 break
 
-        # Balanced sampling for train — must match notebook 05 (deterministic seed)
+        # Balanced sampling for train -- must match notebook 05 (deterministic seed)
         if split == "train" and labels is not None:
             fraud_idx  = np.where(labels == 1)[0]
             normal_idx = np.where(labels == 0)[0]
@@ -518,7 +518,7 @@ def extract_embeddings(
 # ---------------------------------------------------------------------------
 # Component 4: evaluate_fraud_detection
 # Replaces: papermill on 05_xgboost_fraud_detection.ipynb
-# CPU only — no GPU accelerator set in the pipeline definition
+# CPU only -- no GPU accelerator set in the pipeline definition
 # ---------------------------------------------------------------------------
 
 @component(base_image=IMAGE)
@@ -529,7 +529,7 @@ def evaluate_fraud_detection(
 ) -> float:
     """XGBoost fraud detection: raw features vs. foundation model embeddings.
 
-    True decorated component — calls src/ directly. CPU only (no GPU).
+    True decorated component -- calls src/ directly. CPU only (no GPU).
     Contrast with nemo_tfm_pipeline.py which uses papermill to run the
     equivalent notebook (05_xgboost_fraud_detection.ipynb).
 
@@ -543,7 +543,7 @@ def evaluate_fraud_detection(
       - auc_embeddings:   test ROC-AUC for the embedding model
       - lift_pct:         relative improvement (the headline demo number)
 
-    These metrics appear in the OpenShift AI pipeline dashboard metrics tab —
+    These metrics appear in the OpenShift AI pipeline dashboard metrics tab --
     that is the screenshot that closes Demonstration 3 ("The model accuracy
     improvement is real"). Pointing at lift_pct and saying "this is the
     improvement" is only credible because the KFP metadata store records
@@ -556,9 +556,9 @@ def evaluate_fraud_detection(
 
     Parameters
     ----------
-    work_dir        : str            — repo root on the shared PVC
-    embeddings_path : str            — path returned by extract_embeddings
-    metrics         : Output[Metrics] — KFP-injected metrics sink
+    work_dir        : str            -- repo root on the shared PVC
+    embeddings_path : str            -- path returned by extract_embeddings
+    metrics         : Output[Metrics] -- KFP-injected metrics sink
 
     Returns
     -------
@@ -577,7 +577,7 @@ def evaluate_fraud_detection(
     import xgboost as xgb
     import cudf
 
-    # True decorated component — calls src/ directly.
+    # True decorated component -- calls src/ directly.
     sys.path.insert(0, work_dir)
     os.environ["HOME"] = "/tmp"
 
@@ -604,10 +604,10 @@ def evaluate_fraud_detection(
           f"test={len(X_test_embed_raw):,}, dim={embed_dim_orig}")
 
     # ------------------------------------------------------------------
-    # PCA: 512d → 64d
+    # PCA: 512d -> 64d
     # ------------------------------------------------------------------
     PCA_DIM = 64
-    print(f"PCA: {embed_dim_orig}d → {PCA_DIM}d")
+    print(f"PCA: {embed_dim_orig}d -> {PCA_DIM}d")
     pca = PCA(n_components=PCA_DIM, random_state=42)
     X_train_embed_pca = pca.fit_transform(X_train_embed_raw)
     X_val_embed_pca   = pca.transform(X_val_embed_raw)
@@ -642,7 +642,7 @@ def evaluate_fraud_detection(
     test_pdf  = test_gdf.to_pandas()
     del train_gdf, val_gdf, test_gdf
 
-    # Recreate balanced sample indices — must match extract_embeddings (seed=42)
+    # Recreate balanced sample indices -- must match extract_embeddings (seed=42)
     fraud_mask    = (train_pdf[FRAUD_COL] == "Yes") | (train_pdf[FRAUD_COL] == "1")
     fraud_idx     = train_pdf.index[fraud_mask].tolist()
     normal_idx    = train_pdf.index[~fraud_mask].tolist()
@@ -733,6 +733,6 @@ def evaluate_fraud_detection(
     print(f"  auc_raw_features : {baseline_auc:.4f}")
     print(f"  auc_embeddings   : {embedding_auc:.4f}")
     print(f"  lift_pct         : {lift_pct:+.2f}%")
-    print(f"\nThese metrics appear in the RHOAI dashboard → Runs → Metrics tab.")
+    print(f"\nThese metrics appear in the RHOAI dashboard -> Runs -> Metrics tab.")
 
     return embedding_auc
