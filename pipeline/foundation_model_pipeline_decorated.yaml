@@ -251,6 +251,21 @@ components:
       parameters:
         Output:
           parameterType: STRING
+  comp-prepare-dataset:
+    executorLabel: exec-prepare-dataset
+    inputDefinitions:
+      parameters:
+        force_rerun:
+          defaultValue: false
+          description: 'True: delete and regenerate all splits'
+          isOptional: true
+          parameterType: BOOLEAN
+        work_dir:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
   comp-tokenize-transactions:
     executorLabel: exec-tokenize-transactions
     inputDefinitions:
@@ -1005,6 +1020,162 @@ deploymentSpec:
           memoryRequest: 32.0
           resourceCpuRequest: '4'
           resourceMemoryRequest: 32G
+    exec-prepare-dataset:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - prepare_dataset
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.13.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef prepare_dataset(\n    work_dir:    str,\n    force_rerun: bool\
+          \ = False,\n) -> str:\n    \"\"\"Download TabFormer dataset and create temporal\
+          \ train/val/test splits.\n\n    True decorated component -- CPU only, no\
+          \ GPU required.\n    Replaces the data preparation portion of notebook 01\n\
+          \    (01_dataset_baseline.ipynb). Does NOT run the XGBoost baseline --\n\
+          \    that is computed inside evaluate_fraud_detection alongside the\n  \
+          \  embedding model for a fair comparison.\n\n    What this does:\n    -\
+          \ Downloads transactions.tgz from IBM Box if not present\n    - Extracts\
+          \ card_transaction.v1.csv to data/TabFormer/raw/\n    - Creates 80/10/10\
+          \ temporal splits by cumulative row count\n      (same logic as notebook\
+          \ 01 -- cutoff dates derived from\n      find_cutoff_date at 0.8 and 0.9\
+          \ cumulative ratios)\n    - Writes train.parquet, val.parquet, test.parquet\n\
+          \    - Writes val_eval.parquet, test_eval.parquet\n      (100K stratified\
+          \ subsets, random_state=42, used by\n      extract_embeddings and evaluate_fraud_detection)\n\
+          \n    All parquets are written in raw format (Amount still has $,\n    Time\
+          \ is still a string) -- identical to what notebook 01 saves.\n\n    Idempotent:\
+          \ if train.parquet exists and force_rerun=False,\n    returns immediately\
+          \ without re-downloading or re-splitting.\n\n    Better than papermill:\
+          \ the split directory path is a typed return\n    value recorded in KFP\
+          \ metadata store. The notebook version writes\n    wherever the cell says\
+          \ with no typed contract visible to downstream\n    steps.\n\n    Parameters\n\
+          \    ----------\n    work_dir    : str  -- repo root on the shared PVC\n\
+          \    force_rerun : bool -- False: skip if splits already exist\n       \
+          \                  True: delete and regenerate all splits\n\n    Returns\n\
+          \    -------\n    str\n        Absolute path to data/TabFormer/temporal_split/\n\
+          \    \"\"\"\n    import os\n    import sys\n    import tarfile\n    import\
+          \ time\n    from urllib.request import urlretrieve\n\n    sys.path.insert(0,\
+          \ work_dir)\n    os.environ[\"HOME\"] = \"/tmp\"\n\n    split_dir     =\
+          \ os.path.join(work_dir, \"data\", \"TabFormer\", \"temporal_split\")\n\
+          \    train_parquet = os.path.join(split_dir, \"train.parquet\")\n\n    if\
+          \ force_rerun and os.path.exists(split_dir):\n        import shutil\n  \
+          \      shutil.rmtree(split_dir)\n        print(\"force_rerun=True -- cleared\
+          \ existing splits\")\n\n    if os.path.exists(train_parquet):\n        import\
+          \ pandas as pd\n        n = len(pd.read_parquet(train_parquet))\n      \
+          \  print(f\"Splits already exist: {n:,} train rows -- skipping\")\n    \
+          \    return split_dir\n\n    # ------------------------------------------------------------------\n\
+          \    # Download and extract\n    # ------------------------------------------------------------------\n\
+          \    raw_dir  = os.path.join(work_dir, \"data\", \"TabFormer\", \"raw\"\
+          )\n    os.makedirs(raw_dir, exist_ok=True)\n    tgz_path = os.path.join(work_dir,\
+          \ \"data\", \"TabFormer\", \"transactions.tgz\")\n    csv_path = os.path.join(raw_dir,\
+          \ \"card_transaction.v1.csv\")\n\n    DOWNLOAD_URL = (\n        \"https://ibm.ent.box.com/index.php\"\
+          \n        \"?rm=box_download_shared_file\"\n        \"&shared_name=mhrtz6xiknblqznoi9h4f390scoqustt\"\
+          \n        \"&file_id=f_770766751708\"\n    )\n\n    if not os.path.exists(tgz_path):\n\
+          \        print(\"Downloading transactions.tgz from IBM Box (~2.2 GB)...\"\
+          )\n        t0 = time.time()\n        urlretrieve(DOWNLOAD_URL, tgz_path)\n\
+          \        print(f\"  Downloaded in {time.time()-t0:.1f}s\")\n\n    if not\
+          \ os.path.exists(csv_path):\n        print(\"Extracting transactions.tgz...\"\
+          )\n        with tarfile.open(tgz_path, \"r:gz\") as tar:\n            tar.extractall(path=raw_dir)\n\
+          \        print(f\"  Extracted: {csv_path}\")\n\n    print(f\"Dataset ready:\
+          \ {csv_path}\")\n\n    # ------------------------------------------------------------------\n\
+          \    # Load (pandas -- CPU component, no cuDF dependency)\n    # ------------------------------------------------------------------\n\
+          \    import numpy as np\n    import pandas as pd\n    from sklearn.model_selection\
+          \ import train_test_split\n\n    TRAIN_RATIO  = 0.8\n    VAL_RATIO    =\
+          \ 0.1\n    EVAL_SAMPLES = 100_000\n    RANDOM_STATE = 42\n\n    print(\"\
+          Loading card_transaction.v1.csv with pandas...\")\n    t0 = time.time()\n\
+          \    raw_df = pd.read_csv(csv_path)\n    raw_df.columns = [c.strip() for\
+          \ c in raw_df.columns]   # match notebook 01 cell-12\n    print(f\"  Loaded\
+          \ {len(raw_df):,} rows x {raw_df.shape[1]} cols in {time.time()-t0:.1f}s\"\
+          )\n\n    # ------------------------------------------------------------------\n\
+          \    # Temporal split -- direct port of notebook 01 find_cutoff_date logic.\n\
+          \    # 80/10/10 by cumulative transaction count, not by fixed date.\n  \
+          \  # ------------------------------------------------------------------\n\
+          \    print(\"Building temporal splits (80/10/10 by cumulative row count)...\"\
+          )\n    t0 = time.time()\n\n    year_s  = raw_df['Year'].astype(str)\n  \
+          \  month_s = raw_df['Month'].astype(str).str.zfill(2)\n    day_s   = raw_df['Day'].astype(str).str.zfill(2)\n\
+          \    raw_df['date'] = pd.to_datetime(\n        year_s + '-' + month_s +\
+          \ '-' + day_s, format='%Y-%m-%d'\n    )\n\n    def find_cutoff_date(df,\
+          \ target_ratio):\n        \"\"\"First date where cumulative row count >=\
+          \ target_ratio * total.\n        Direct port of notebook 01 find_cutoff_date.\"\
+          \"\"\n        daily = (df.groupby('date')\n                   .size()\n\
+          \                   .reset_index(name='count')\n                   .sort_values('date'))\n\
+          \        daily['cumulative'] = daily['count'].cumsum()\n        total  =\
+          \ int(daily['cumulative'].iloc[-1])\n        target = total * target_ratio\n\
+          \        return daily.loc[daily['cumulative'] >= target, 'date'].iloc[0]\n\
+          \n    train_cutoff = find_cutoff_date(raw_df, TRAIN_RATIO)\n    test_cutoff\
+          \  = find_cutoff_date(raw_df, TRAIN_RATIO + VAL_RATIO)\n    print(f\"  Train/Val\
+          \ cutoff: {train_cutoff.strftime('%Y-%m-%d')}\")\n    print(f\"  Val/Test\
+          \  cutoff: {test_cutoff.strftime('%Y-%m-%d')}\")\n\n    train_mask = raw_df['date']\
+          \ < train_cutoff\n    val_mask   = (raw_df['date'] >= train_cutoff) & (raw_df['date']\
+          \ < test_cutoff)\n    test_mask  = raw_df['date'] >= test_cutoff\n\n   \
+          \ train_df = raw_df[train_mask].drop(columns=['date']).reset_index(drop=True)\n\
+          \    val_df   = raw_df[val_mask].drop(columns=['date']).reset_index(drop=True)\n\
+          \    test_df  = raw_df[test_mask].drop(columns=['date']).reset_index(drop=True)\n\
+          \    del raw_df\n    print(f\"  Split time: {time.time()-t0:.1f}s\")\n\n\
+          \    total = len(train_df) + len(val_df) + len(test_df)\n    for name, df\
+          \ in [('Train', train_df), ('Val', val_df), ('Test', test_df)]:\n      \
+          \  n     = len(df)\n        fraud = int(((df['Is Fraud?'] == 'Yes') | (df['Is\
+          \ Fraud?'] == '1')).sum())\n        print(f\"  {name:<6} {n:>12,}  ({n/total*100:.1f}%)\
+          \  fraud {fraud:,}  ({fraud/n:.4%})\")\n\n    # ------------------------------------------------------------------\n\
+          \    # Save train / val / test parquets (raw format, no feature engineering)\n\
+          \    # ------------------------------------------------------------------\n\
+          \    os.makedirs(split_dir, exist_ok=True)\n    t0 = time.time()\n    for\
+          \ name, df in [('train', train_df), ('val', val_df), ('test', test_df)]:\n\
+          \        path = os.path.join(split_dir, f'{name}.parquet')\n        df.to_parquet(path,\
+          \ index=False)\n        print(f\"  Saved {name}.parquet ({len(df):,} rows)\"\
+          )\n    print(f\"  Write time: {time.time()-t0:.1f}s\")\n\n    # ------------------------------------------------------------------\n\
+          \    # val_eval and test_eval -- 100K stratified subsets.\n    # Mirrors\
+          \ notebook 01 section 5: stratified_subsample uses\n    # train_test_split(...,\
+          \ stratify=_target, test_size=100_000,\n    # random_state=42) then saves\
+          \ the raw rows (before feature\n    # engineering) at the sampled positional\
+          \ indices.\n    # val_eval and test_eval are used by extract_embeddings\
+          \ and\n    # evaluate_fraud_detection; the full val/test parquets are used\n\
+          \    # by tokenize_transactions for corpus generation.\n    # ------------------------------------------------------------------\n\
+          \    print(f\"\\nCreating {EVAL_SAMPLES:,}-row stratified eval subsets...\"\
+          )\n\n    def stratified_subsample_idx(df, n_samples, random_state):\n  \
+          \      \"\"\"Return positional indices of a stratified sample.\n       \
+          \ Stratify on binary fraud flag (mirrors notebook 01 _target logic).\"\"\
+          \"\n        target = ((df['Is Fraud?'] == 'Yes') | (df['Is Fraud?'] == '1')).astype(int)\n\
+          \        if n_samples >= len(df):\n            return df.index.to_numpy()\n\
+          \        _, sampled_idx = train_test_split(\n            df.index,\n   \
+          \         test_size=n_samples,\n            stratify=target,\n         \
+          \   random_state=random_state,\n        )\n        return sampled_idx\n\n\
+          \    for split_name, full_df in [('val_eval', val_df), ('test_eval', test_df)]:\n\
+          \        idx    = stratified_subsample_idx(full_df, EVAL_SAMPLES, RANDOM_STATE)\n\
+          \        subset = full_df.iloc[idx].reset_index(drop=True)\n        out\
+          \    = os.path.join(split_dir, f'{split_name}.parquet')\n        subset.to_parquet(out,\
+          \ index=False)\n        fraud  = int(((subset['Is Fraud?'] == 'Yes') | (subset['Is\
+          \ Fraud?'] == '1')).sum())\n        print(f\"  Saved {split_name}.parquet:\
+          \ {len(subset):,} rows \"\n              f\"(fraud {fraud:,}, {fraud/len(subset):.4%})\"\
+          )\n\n    print(f\"\\nAll splits saved to {split_dir}\")\n    return split_dir\n\
+          \n"
+        env:
+        - name: HOME
+          value: /tmp
+        image: image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-workbench:latest
+        resources:
+          cpuRequest: 2.0
+          memoryRequest: 16.0
+          resourceCpuRequest: '2'
+          resourceMemoryRequest: 16G
     exec-tokenize-transactions:
       container:
         args:
@@ -1218,10 +1389,24 @@ root:
               componentInputParameter: work_dir
         taskInfo:
           name: condition-branches-1
+      prepare-dataset:
+        cachingOptions: {}
+        componentRef:
+          name: comp-prepare-dataset
+        inputs:
+          parameters:
+            force_rerun:
+              componentInputParameter: force_rerun
+            work_dir:
+              componentInputParameter: work_dir
+        taskInfo:
+          name: prepare-dataset
       tokenize-transactions:
         cachingOptions: {}
         componentRef:
           name: comp-tokenize-transactions
+        dependentTasks:
+        - prepare-dataset
         inputs:
           parameters:
             force_rerun:
@@ -1234,7 +1419,7 @@ root:
     parameters:
       force_rerun:
         defaultValue: false
-        description: 'if present -- makes repeated demo runs fast.
+        description: 'embeddings if present -- makes repeated runs fast.
 
           True: clear and regenerate all intermediate outputs.
 
@@ -1308,6 +1493,16 @@ platforms:
               runtimeValue:
                 constant: nemo-tfm-workbench-data
         exec-extract-embeddings-2:
+          nodeSelector:
+            labels:
+              nvidia.com/gpu.present: 'true'
+          pvcMount:
+          - constant: nemo-tfm-workbench-data
+            mountPath: /opt/app-root/src
+            pvcNameParameter:
+              runtimeValue:
+                constant: nemo-tfm-workbench-data
+        exec-prepare-dataset:
           nodeSelector:
             labels:
               nvidia.com/gpu.present: 'true'

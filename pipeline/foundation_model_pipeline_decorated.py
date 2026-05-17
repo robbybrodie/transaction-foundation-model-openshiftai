@@ -53,6 +53,7 @@ from kfp import dsl, compiler
 from kfp import kubernetes
 
 from components_decorated import (
+    prepare_dataset,
     tokenize_transactions,
     train_foundation_model,
     extract_embeddings,
@@ -117,6 +118,13 @@ def foundation_model_pipeline_decorated(
 ):
     """Switchable end-to-end pipeline using true decorated components.
 
+    Now self-contained: prepare_dataset (step 0) downloads the TabFormer
+    dataset and creates temporal splits, so the pipeline works on a fresh
+    PVC without needing the papermill pipeline to run first.
+
+    Demo mode (default):  s0 -> s1 -> s3d -> s4d  (4 steps, ~20-30 min)
+    Train mode:           s0 -> s1 -> s2t -> s3t -> s4t  (5 steps)
+
     Parameters
     ----------
     work_dir    : str  -- absolute path to the cloned repo on the shared PVC.
@@ -130,19 +138,34 @@ def foundation_model_pipeline_decorated(
                          30   = demo capability proof (fast).
                          500+ = meaningful training.
                          3000 = full NVIDIA equivalent (use H200s).
-    force_rerun : bool -- False (default): reuse existing corpus/embeddings
-                         if present -- makes repeated demo runs fast.
+    force_rerun : bool -- False (default): reuse existing splits/corpus/
+                         embeddings if present -- makes repeated runs fast.
                          True: clear and regenerate all intermediate outputs.
                          Always set True for train mode to avoid stale demo
                          artifacts contaminating results.
     """
 
     # ------------------------------------------------------------------
+    # Step 0: prepare_dataset -- always runs first in both modes.
+    # CPU only. Downloads TabFormer and creates temporal splits.
+    # Idempotent: skips if splits already exist and force_rerun=False.
+    # Replaces: data preparation portion of 01_dataset_baseline.ipynb
+    # Returns: split_dir (data/TabFormer/temporal_split/)
+    # ------------------------------------------------------------------
+    s0 = prepare_dataset(work_dir=work_dir, force_rerun=force_rerun)
+    s0.set_cpu_request("2").set_memory_request("16G")
+    _configure_task(s0)
+
+    # ------------------------------------------------------------------
     # Step 1: tokenize_transactions -- always runs in both modes.
+    # s1.after(s0) enforces sequencing -- s1 has no typed dependency on
+    # s0's output (it reads from the PVC directly) so without this call
+    # KFP would schedule them in parallel.
     # Replaces: papermill on 02_seq_preproc_tokenization.ipynb
     # Returns: corpus_dir (data/decoder_corpus/)
     # ------------------------------------------------------------------
     s1 = tokenize_transactions(work_dir=work_dir, force_rerun=force_rerun)
+    s1.after(s0)
     s1.set_cpu_request("4").set_memory_request("32G")
     s1.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
     _configure_task(s1)

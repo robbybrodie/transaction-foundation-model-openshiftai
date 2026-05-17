@@ -41,6 +41,225 @@ IMAGE = "image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-work
 
 
 # ---------------------------------------------------------------------------
+# Component 0: prepare_dataset
+# Replaces: data preparation portion of 01_dataset_baseline.ipynb
+# (does NOT run the XGBoost baseline -- that lives in evaluate_fraud_detection)
+# ---------------------------------------------------------------------------
+
+@component(base_image=IMAGE)
+def prepare_dataset(
+    work_dir:    str,
+    force_rerun: bool = False,
+) -> str:
+    """Download TabFormer dataset and create temporal train/val/test splits.
+
+    True decorated component -- CPU only, no GPU required.
+    Replaces the data preparation portion of notebook 01
+    (01_dataset_baseline.ipynb). Does NOT run the XGBoost baseline --
+    that is computed inside evaluate_fraud_detection alongside the
+    embedding model for a fair comparison.
+
+    What this does:
+    - Downloads transactions.tgz from IBM Box if not present
+    - Extracts card_transaction.v1.csv to data/TabFormer/raw/
+    - Creates 80/10/10 temporal splits by cumulative row count
+      (same logic as notebook 01 -- cutoff dates derived from
+      find_cutoff_date at 0.8 and 0.9 cumulative ratios)
+    - Writes train.parquet, val.parquet, test.parquet
+    - Writes val_eval.parquet, test_eval.parquet
+      (100K stratified subsets, random_state=42, used by
+      extract_embeddings and evaluate_fraud_detection)
+
+    All parquets are written in raw format (Amount still has $,
+    Time is still a string) -- identical to what notebook 01 saves.
+
+    Idempotent: if train.parquet exists and force_rerun=False,
+    returns immediately without re-downloading or re-splitting.
+
+    Better than papermill: the split directory path is a typed return
+    value recorded in KFP metadata store. The notebook version writes
+    wherever the cell says with no typed contract visible to downstream
+    steps.
+
+    Parameters
+    ----------
+    work_dir    : str  -- repo root on the shared PVC
+    force_rerun : bool -- False: skip if splits already exist
+                         True: delete and regenerate all splits
+
+    Returns
+    -------
+    str
+        Absolute path to data/TabFormer/temporal_split/
+    """
+    import os
+    import sys
+    import tarfile
+    import time
+    from urllib.request import urlretrieve
+
+    sys.path.insert(0, work_dir)
+    os.environ["HOME"] = "/tmp"
+
+    split_dir     = os.path.join(work_dir, "data", "TabFormer", "temporal_split")
+    train_parquet = os.path.join(split_dir, "train.parquet")
+
+    if force_rerun and os.path.exists(split_dir):
+        import shutil
+        shutil.rmtree(split_dir)
+        print("force_rerun=True -- cleared existing splits")
+
+    if os.path.exists(train_parquet):
+        import pandas as pd
+        n = len(pd.read_parquet(train_parquet))
+        print(f"Splits already exist: {n:,} train rows -- skipping")
+        return split_dir
+
+    # ------------------------------------------------------------------
+    # Download and extract
+    # ------------------------------------------------------------------
+    raw_dir  = os.path.join(work_dir, "data", "TabFormer", "raw")
+    os.makedirs(raw_dir, exist_ok=True)
+    tgz_path = os.path.join(work_dir, "data", "TabFormer", "transactions.tgz")
+    csv_path = os.path.join(raw_dir, "card_transaction.v1.csv")
+
+    DOWNLOAD_URL = (
+        "https://ibm.ent.box.com/index.php"
+        "?rm=box_download_shared_file"
+        "&shared_name=mhrtz6xiknblqznoi9h4f390scoqustt"
+        "&file_id=f_770766751708"
+    )
+
+    if not os.path.exists(tgz_path):
+        print("Downloading transactions.tgz from IBM Box (~2.2 GB)...")
+        t0 = time.time()
+        urlretrieve(DOWNLOAD_URL, tgz_path)
+        print(f"  Downloaded in {time.time()-t0:.1f}s")
+
+    if not os.path.exists(csv_path):
+        print("Extracting transactions.tgz...")
+        with tarfile.open(tgz_path, "r:gz") as tar:
+            tar.extractall(path=raw_dir)
+        print(f"  Extracted: {csv_path}")
+
+    print(f"Dataset ready: {csv_path}")
+
+    # ------------------------------------------------------------------
+    # Load (pandas -- CPU component, no cuDF dependency)
+    # ------------------------------------------------------------------
+    import numpy as np
+    import pandas as pd
+    from sklearn.model_selection import train_test_split
+
+    TRAIN_RATIO  = 0.8
+    VAL_RATIO    = 0.1
+    EVAL_SAMPLES = 100_000
+    RANDOM_STATE = 42
+
+    print("Loading card_transaction.v1.csv with pandas...")
+    t0 = time.time()
+    raw_df = pd.read_csv(csv_path)
+    raw_df.columns = [c.strip() for c in raw_df.columns]   # match notebook 01 cell-12
+    print(f"  Loaded {len(raw_df):,} rows x {raw_df.shape[1]} cols in {time.time()-t0:.1f}s")
+
+    # ------------------------------------------------------------------
+    # Temporal split -- direct port of notebook 01 find_cutoff_date logic.
+    # 80/10/10 by cumulative transaction count, not by fixed date.
+    # ------------------------------------------------------------------
+    print("Building temporal splits (80/10/10 by cumulative row count)...")
+    t0 = time.time()
+
+    year_s  = raw_df['Year'].astype(str)
+    month_s = raw_df['Month'].astype(str).str.zfill(2)
+    day_s   = raw_df['Day'].astype(str).str.zfill(2)
+    raw_df['date'] = pd.to_datetime(
+        year_s + '-' + month_s + '-' + day_s, format='%Y-%m-%d'
+    )
+
+    def find_cutoff_date(df, target_ratio):
+        """First date where cumulative row count >= target_ratio * total.
+        Direct port of notebook 01 find_cutoff_date."""
+        daily = (df.groupby('date')
+                   .size()
+                   .reset_index(name='count')
+                   .sort_values('date'))
+        daily['cumulative'] = daily['count'].cumsum()
+        total  = int(daily['cumulative'].iloc[-1])
+        target = total * target_ratio
+        return daily.loc[daily['cumulative'] >= target, 'date'].iloc[0]
+
+    train_cutoff = find_cutoff_date(raw_df, TRAIN_RATIO)
+    test_cutoff  = find_cutoff_date(raw_df, TRAIN_RATIO + VAL_RATIO)
+    print(f"  Train/Val cutoff: {train_cutoff.strftime('%Y-%m-%d')}")
+    print(f"  Val/Test  cutoff: {test_cutoff.strftime('%Y-%m-%d')}")
+
+    train_mask = raw_df['date'] < train_cutoff
+    val_mask   = (raw_df['date'] >= train_cutoff) & (raw_df['date'] < test_cutoff)
+    test_mask  = raw_df['date'] >= test_cutoff
+
+    train_df = raw_df[train_mask].drop(columns=['date']).reset_index(drop=True)
+    val_df   = raw_df[val_mask].drop(columns=['date']).reset_index(drop=True)
+    test_df  = raw_df[test_mask].drop(columns=['date']).reset_index(drop=True)
+    del raw_df
+    print(f"  Split time: {time.time()-t0:.1f}s")
+
+    total = len(train_df) + len(val_df) + len(test_df)
+    for name, df in [('Train', train_df), ('Val', val_df), ('Test', test_df)]:
+        n     = len(df)
+        fraud = int(((df['Is Fraud?'] == 'Yes') | (df['Is Fraud?'] == '1')).sum())
+        print(f"  {name:<6} {n:>12,}  ({n/total*100:.1f}%)  fraud {fraud:,}  ({fraud/n:.4%})")
+
+    # ------------------------------------------------------------------
+    # Save train / val / test parquets (raw format, no feature engineering)
+    # ------------------------------------------------------------------
+    os.makedirs(split_dir, exist_ok=True)
+    t0 = time.time()
+    for name, df in [('train', train_df), ('val', val_df), ('test', test_df)]:
+        path = os.path.join(split_dir, f'{name}.parquet')
+        df.to_parquet(path, index=False)
+        print(f"  Saved {name}.parquet ({len(df):,} rows)")
+    print(f"  Write time: {time.time()-t0:.1f}s")
+
+    # ------------------------------------------------------------------
+    # val_eval and test_eval -- 100K stratified subsets.
+    # Mirrors notebook 01 section 5: stratified_subsample uses
+    # train_test_split(..., stratify=_target, test_size=100_000,
+    # random_state=42) then saves the raw rows (before feature
+    # engineering) at the sampled positional indices.
+    # val_eval and test_eval are used by extract_embeddings and
+    # evaluate_fraud_detection; the full val/test parquets are used
+    # by tokenize_transactions for corpus generation.
+    # ------------------------------------------------------------------
+    print(f"\nCreating {EVAL_SAMPLES:,}-row stratified eval subsets...")
+
+    def stratified_subsample_idx(df, n_samples, random_state):
+        """Return positional indices of a stratified sample.
+        Stratify on binary fraud flag (mirrors notebook 01 _target logic)."""
+        target = ((df['Is Fraud?'] == 'Yes') | (df['Is Fraud?'] == '1')).astype(int)
+        if n_samples >= len(df):
+            return df.index.to_numpy()
+        _, sampled_idx = train_test_split(
+            df.index,
+            test_size=n_samples,
+            stratify=target,
+            random_state=random_state,
+        )
+        return sampled_idx
+
+    for split_name, full_df in [('val_eval', val_df), ('test_eval', test_df)]:
+        idx    = stratified_subsample_idx(full_df, EVAL_SAMPLES, RANDOM_STATE)
+        subset = full_df.iloc[idx].reset_index(drop=True)
+        out    = os.path.join(split_dir, f'{split_name}.parquet')
+        subset.to_parquet(out, index=False)
+        fraud  = int(((subset['Is Fraud?'] == 'Yes') | (subset['Is Fraud?'] == '1')).sum())
+        print(f"  Saved {split_name}.parquet: {len(subset):,} rows "
+              f"(fraud {fraud:,}, {fraud/len(subset):.4%})")
+
+    print(f"\nAll splits saved to {split_dir}")
+    return split_dir
+
+
+# ---------------------------------------------------------------------------
 # Component 1: tokenize_transactions
 # Replaces: papermill on 02_seq_preproc_tokenization.ipynb
 # ---------------------------------------------------------------------------
