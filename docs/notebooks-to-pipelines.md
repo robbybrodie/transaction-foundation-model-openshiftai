@@ -84,14 +84,13 @@ artefact path, every hyperparameter, every metric.
 | s1 | `tokenize_transactions` | GPU cuDF tokeniser; returns `corpus_dir` typed output | ✓ | ✓ |
 | s2 | `train_foundation_model` | NeMo pretraining via `torchrun`; records `max_steps` in metadata store | — | ✓ |
 | s3 | `extract_embeddings` | 512-d last-token embeddings from LFS checkpoint | ✓ | ✓ |
-| s4 | `evaluate_fraud_detection` | PCA 64d + XGBoost; logs `auc_raw_features`, `auc_embeddings`, `lift_pct` | ✓ | ✓ |
+| s4 | `evaluate_fraud_detection` | PCA 64d + XGBoost (3 models); logs 5 structured metrics: `auc_raw_features`, `auc_embeddings`, `lift_pct`, `auc_combined`, `lift_combined_pct` | ✓ | ✓ |
 
 **What you get:**
 - Self-contained on a fresh PVC — `prepare_dataset` (s0) downloads the TabFormer dataset and
   creates all required parquet splits; no prior papermill run needed
 - Typed I/O contracts (e.g. `corpus_dir: str` flows from tokenise → train, recorded in lineage)
-- Three structured metrics (`auc_raw_features`, `auc_embeddings`, `lift_pct`) visible
-  in the dashboard Metrics tab — queryable across versions
+- Five structured metrics visible in the dashboard Metrics tab — queryable across versions
 - `max_steps` is a pipeline parameter recorded per-run, not buried in a notebook cell
 - Components can be unit-tested in isolation without running the full pipeline
 - Fine-grained GPU allocation (s0 and s4: CPU only; s1 and s3: 1 GPU each)
@@ -170,11 +169,19 @@ with the exact value of `max_steps` that was used. In the papermill version, tha
 is in a notebook cell — readable, but not queryable.
 
 **2. Structured metrics queryable across versions.**
-`auc_raw_features`, `auc_embeddings`, and `lift_pct` are logged via `Output[Metrics]`
-and appear in the RHOAI dashboard Metrics tab. You can compare AUC across 10 runs
-in a single view without opening a notebook. When a model governance board asks
-"did AUC change between the June and July versions?", the answer is a dashboard
-screenshot, not a notebook cell output.
+Five metrics are logged via `Output[Metrics]` and appear in the RHOAI dashboard Metrics tab:
+`auc_raw_features` (raw 13d features baseline), `auc_embeddings` (embeddings only, PCA 64d),
+`lift_pct` (embeddings-only lift — expected to be negative; embeddings alone do not beat
+well-engineered tabular features), `auc_combined` (raw + embeddings, 77d), and
+`lift_combined_pct` (the headline number: combined model lift over the baseline, ~+1.82%).
+You can compare all five across 10 runs in a single view without opening a notebook.
+When a model governance board asks "did AUC change between the June and July versions?",
+the answer is a dashboard screenshot, not a notebook cell output.
+
+The negative `lift_pct` is deliberately exposed rather than hidden. Recording it makes the
+positive `lift_combined_pct` credible: the embeddings carry signal that raw features do not
+have, and the combined model captures it. Showing only the combined result without the
+embeddings-only comparison would be incomplete governance evidence.
 
 **3. Explicit data lineage.**
 The typed `corpus_dir` output of `tokenize_transactions` is the typed input of
@@ -265,7 +272,7 @@ ArgoCD. They share a namespace and a PVC; that is the extent of their coupling.
 
 **Why this matters for the demo:** The GitOps demonstration (ArgoCD Synced/Healthy,
 automated cluster provisioning) is independent of the ML accuracy demonstration
-(lift_pct in the dashboard). You can run the GitOps demo without running any ML.
+(lift_combined_pct in the dashboard). You can run the GitOps demo without running any ML.
 You can run the ML demo on a manually-provisioned cluster without ArgoCD.
 Both demonstrations are real; neither depends on the other.
 
