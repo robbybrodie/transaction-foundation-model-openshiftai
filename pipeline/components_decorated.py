@@ -46,7 +46,7 @@ IMAGE = "image-registry.openshift-image-registry.svc:5000/nemo-tfm/nemo-tfm-work
 # ---------------------------------------------------------------------------
 
 @component(base_image=IMAGE)
-def tokenize_transactions(work_dir: str) -> str:
+def tokenize_transactions(work_dir: str, force_rerun: bool = False) -> str:
     """Run the GPU-accelerated financial tokeniser and write text corpora.
 
     True decorated component — calls src/ directly.
@@ -89,6 +89,12 @@ def tokenize_transactions(work_dir: str) -> str:
 
     temporal_dir = os.path.join(work_dir, "data", "TabFormer", "temporal_split")
     corpus_dir   = os.path.join(work_dir, "data", "decoder_corpus")
+
+    if force_rerun and os.path.exists(corpus_dir):
+        import shutil
+        shutil.rmtree(corpus_dir)
+        print("force_rerun=True — cleared existing corpus")
+
     os.makedirs(corpus_dir, exist_ok=True)
 
     splits = [
@@ -156,8 +162,9 @@ def tokenize_transactions(work_dir: str) -> str:
 def train_foundation_model(
     work_dir:    str,
     corpus_dir:  str,
-    config_path: str = "configs/pretrain_financial_decoder.yaml",
-    max_steps:   int = 30,
+    config_path: str  = "configs/pretrain_financial_decoder.yaml",
+    max_steps:   int  = 30,
+    force_rerun: bool = False,
 ) -> str:
     """Run NeMo decoder pretraining via torchrun.
 
@@ -201,6 +208,13 @@ def train_foundation_model(
     sys.path.insert(0, work_dir)
     os.environ["HOME"] = "/tmp"
 
+    if force_rerun:
+        import shutil
+        checkpoint_dir_to_clear = os.path.join(work_dir, "models", "decoder-demo")
+        if os.path.exists(checkpoint_dir_to_clear):
+            shutil.rmtree(checkpoint_dir_to_clear)
+            print("force_rerun=True — cleared existing decoder-demo checkpoint")
+
     abs_config   = os.path.join(work_dir, config_path)
     train_script = os.path.join(work_dir, "scripts", "train_decoder_model.py")
     train_corpus = os.path.join(corpus_dir, "train_corpus.txt")
@@ -237,8 +251,9 @@ def train_foundation_model(
 
 @component(base_image=IMAGE)
 def extract_embeddings(
-    work_dir:   str,
-    model_path: str = "models/decoder-foundation-model",
+    work_dir:    str,
+    model_path:  str  = "models/decoder-foundation-model",
+    force_rerun: bool = False,
 ) -> str:
     """Extract 512-d last-token embeddings from the decoder model.
 
@@ -294,6 +309,14 @@ def extract_embeddings(
     # Resolve model_path relative to work_dir if not absolute
     if not os.path.isabs(model_path):
         model_path = os.path.join(work_dir, model_path)
+
+    if force_rerun:
+        import shutil
+        embed_dir_to_clear = os.path.join(work_dir, "data", "embeddings")
+        if os.path.exists(embed_dir_to_clear):
+            shutil.rmtree(embed_dir_to_clear)
+            os.makedirs(embed_dir_to_clear, exist_ok=True)
+            print("force_rerun=True — cleared existing embeddings")
 
     # ------------------------------------------------------------------
     # LFS smudge: detect pointer files and download real safetensors blobs.

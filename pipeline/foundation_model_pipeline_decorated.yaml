@@ -2,6 +2,7 @@
 # Name: nemo-tfm-foundation-model-decorated
 # Description: Decorated KFP v2 pipeline — typed I/O components calling src/ directly. Contrast with nemo-transaction-foundation-model (papermill version).
 # Inputs:
+#    force_rerun: bool [Default: False]
 #    max_steps: int [Default: 30.0]
 #    mode: str [Default: 'demo']
 #    model_path: str [Default: 'models/decoder-foundation-model']
@@ -34,6 +35,8 @@ components:
           - train-foundation-model
           inputs:
             parameters:
+              force_rerun:
+                componentInputParameter: pipelinechannel--force_rerun
               model_path:
                 componentInputParameter: pipelinechannel--model_path
               work_dir:
@@ -48,6 +51,8 @@ components:
             parameters:
               corpus_dir:
                 componentInputParameter: pipelinechannel--tokenize-transactions-Output
+              force_rerun:
+                componentInputParameter: pipelinechannel--force_rerun
               max_steps:
                 componentInputParameter: pipelinechannel--max_steps
               work_dir:
@@ -56,6 +61,8 @@ components:
             name: train-foundation-model
     inputDefinitions:
       parameters:
+        pipelinechannel--force_rerun:
+          parameterType: BOOLEAN
         pipelinechannel--max_steps:
           parameterType: NUMBER_INTEGER
         pipelinechannel--mode:
@@ -91,6 +98,8 @@ components:
             name: comp-extract-embeddings-2
           inputs:
             parameters:
+              force_rerun:
+                componentInputParameter: pipelinechannel--force_rerun
               model_path:
                 componentInputParameter: pipelinechannel--model_path
               work_dir:
@@ -99,6 +108,8 @@ components:
             name: extract-embeddings-2
     inputDefinitions:
       parameters:
+        pipelinechannel--force_rerun:
+          parameterType: BOOLEAN
         pipelinechannel--mode:
           parameterType: STRING
         pipelinechannel--model_path:
@@ -113,6 +124,8 @@ components:
             name: comp-condition-2
           inputs:
             parameters:
+              pipelinechannel--force_rerun:
+                componentInputParameter: pipelinechannel--force_rerun
               pipelinechannel--max_steps:
                 componentInputParameter: pipelinechannel--max_steps
               pipelinechannel--mode:
@@ -132,6 +145,8 @@ components:
             name: comp-condition-3
           inputs:
             parameters:
+              pipelinechannel--force_rerun:
+                componentInputParameter: pipelinechannel--force_rerun
               pipelinechannel--mode:
                 componentInputParameter: pipelinechannel--mode
               pipelinechannel--model_path:
@@ -144,6 +159,8 @@ components:
             condition: '!(inputs.parameter_values[''pipelinechannel--mode''] == ''train'')'
     inputDefinitions:
       parameters:
+        pipelinechannel--force_rerun:
+          parameterType: BOOLEAN
         pipelinechannel--max_steps:
           parameterType: NUMBER_INTEGER
         pipelinechannel--mode:
@@ -192,6 +209,10 @@ components:
     executorLabel: exec-extract-embeddings
     inputDefinitions:
       parameters:
+        force_rerun:
+          defaultValue: false
+          isOptional: true
+          parameterType: BOOLEAN
         model_path:
           defaultValue: models/decoder-foundation-model
           description: "Default: models/decoder-foundation-model/ (Git LFS,\n3000-step\
@@ -209,6 +230,10 @@ components:
     executorLabel: exec-extract-embeddings-2
     inputDefinitions:
       parameters:
+        force_rerun:
+          defaultValue: false
+          isOptional: true
+          parameterType: BOOLEAN
         model_path:
           defaultValue: models/decoder-foundation-model
           description: "Default: models/decoder-foundation-model/ (Git LFS,\n3000-step\
@@ -226,6 +251,10 @@ components:
     executorLabel: exec-tokenize-transactions
     inputDefinitions:
       parameters:
+        force_rerun:
+          defaultValue: false
+          isOptional: true
+          parameterType: BOOLEAN
         work_dir:
           parameterType: STRING
     outputDefinitions:
@@ -242,6 +271,10 @@ components:
           parameterType: STRING
         corpus_dir:
           parameterType: STRING
+        force_rerun:
+          defaultValue: false
+          isOptional: true
+          parameterType: BOOLEAN
         max_steps:
           defaultValue: 30.0
           isOptional: true
@@ -614,12 +647,13 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef extract_embeddings(\n    work_dir:   str,\n    model_path: str\
-          \ = \"models/decoder-foundation-model\",\n) -> str:\n    \"\"\"Extract 512-d\
-          \ last-token embeddings from the decoder model.\n\n    True decorated component\
-          \ \u2014 calls src/ directly.\n    Contrast with nemo_tfm_pipeline.py which\
-          \ uses papermill to run the\n    equivalent notebook (04_inference_embedding_extraction.ipynb).\n\
-          \n    Runs GPU-accelerated cuDF tokenisation + HuggingFaceDecoderInference\n\
+          \ *\n\ndef extract_embeddings(\n    work_dir:    str,\n    model_path: \
+          \ str  = \"models/decoder-foundation-model\",\n    force_rerun: bool = False,\n\
+          ) -> str:\n    \"\"\"Extract 512-d last-token embeddings from the decoder\
+          \ model.\n\n    True decorated component \u2014 calls src/ directly.\n \
+          \   Contrast with nemo_tfm_pipeline.py which uses papermill to run the\n\
+          \    equivalent notebook (04_inference_embedding_extraction.ipynb).\n\n\
+          \    Runs GPU-accelerated cuDF tokenisation + HuggingFaceDecoderInference\n\
           \    batch inference for all three splits:\n      - train:  balanced ~1M\
           \ sample (10% fraud, seed=42, matching notebook 05)\n      - val:    100K\
           \ stratified subset from val_eval.parquet\n      - test:   100K stratified\
@@ -646,7 +680,11 @@ deploymentSpec:
           \    sys.path.insert(0, work_dir)\n    os.environ[\"HOME\"] = \"/tmp\"\n\
           \n    # Resolve model_path relative to work_dir if not absolute\n    if\
           \ not os.path.isabs(model_path):\n        model_path = os.path.join(work_dir,\
-          \ model_path)\n\n    # ------------------------------------------------------------------\n\
+          \ model_path)\n\n    if force_rerun:\n        import shutil\n        embed_dir_to_clear\
+          \ = os.path.join(work_dir, \"data\", \"embeddings\")\n        if os.path.exists(embed_dir_to_clear):\n\
+          \            shutil.rmtree(embed_dir_to_clear)\n            os.makedirs(embed_dir_to_clear,\
+          \ exist_ok=True)\n            print(\"force_rerun=True \u2014 cleared existing\
+          \ embeddings\")\n\n    # ------------------------------------------------------------------\n\
           \    # LFS smudge: detect pointer files and download real safetensors blobs.\n\
           \    # Copied verbatim from inference_embedding_extraction in nemo_tfm_pipeline.py\n\
           \    # \u2014 behaviour is identical in both pipelines. Do not modify independently.\n\
@@ -799,12 +837,13 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef extract_embeddings(\n    work_dir:   str,\n    model_path: str\
-          \ = \"models/decoder-foundation-model\",\n) -> str:\n    \"\"\"Extract 512-d\
-          \ last-token embeddings from the decoder model.\n\n    True decorated component\
-          \ \u2014 calls src/ directly.\n    Contrast with nemo_tfm_pipeline.py which\
-          \ uses papermill to run the\n    equivalent notebook (04_inference_embedding_extraction.ipynb).\n\
-          \n    Runs GPU-accelerated cuDF tokenisation + HuggingFaceDecoderInference\n\
+          \ *\n\ndef extract_embeddings(\n    work_dir:    str,\n    model_path: \
+          \ str  = \"models/decoder-foundation-model\",\n    force_rerun: bool = False,\n\
+          ) -> str:\n    \"\"\"Extract 512-d last-token embeddings from the decoder\
+          \ model.\n\n    True decorated component \u2014 calls src/ directly.\n \
+          \   Contrast with nemo_tfm_pipeline.py which uses papermill to run the\n\
+          \    equivalent notebook (04_inference_embedding_extraction.ipynb).\n\n\
+          \    Runs GPU-accelerated cuDF tokenisation + HuggingFaceDecoderInference\n\
           \    batch inference for all three splits:\n      - train:  balanced ~1M\
           \ sample (10% fraud, seed=42, matching notebook 05)\n      - val:    100K\
           \ stratified subset from val_eval.parquet\n      - test:   100K stratified\
@@ -831,7 +870,11 @@ deploymentSpec:
           \    sys.path.insert(0, work_dir)\n    os.environ[\"HOME\"] = \"/tmp\"\n\
           \n    # Resolve model_path relative to work_dir if not absolute\n    if\
           \ not os.path.isabs(model_path):\n        model_path = os.path.join(work_dir,\
-          \ model_path)\n\n    # ------------------------------------------------------------------\n\
+          \ model_path)\n\n    if force_rerun:\n        import shutil\n        embed_dir_to_clear\
+          \ = os.path.join(work_dir, \"data\", \"embeddings\")\n        if os.path.exists(embed_dir_to_clear):\n\
+          \            shutil.rmtree(embed_dir_to_clear)\n            os.makedirs(embed_dir_to_clear,\
+          \ exist_ok=True)\n            print(\"force_rerun=True \u2014 cleared existing\
+          \ embeddings\")\n\n    # ------------------------------------------------------------------\n\
           \    # LFS smudge: detect pointer files and download real safetensors blobs.\n\
           \    # Copied verbatim from inference_embedding_extraction in nemo_tfm_pipeline.py\n\
           \    # \u2014 behaviour is identical in both pipelines. Do not modify independently.\n\
@@ -984,12 +1027,13 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef tokenize_transactions(work_dir: str) -> str:\n    \"\"\"Run the\
-          \ GPU-accelerated financial tokeniser and write text corpora.\n\n    True\
-          \ decorated component \u2014 calls src/ directly.\n    Contrast with nemo_tfm_pipeline.py\
-          \ which uses papermill to run the\n    equivalent notebook (02_seq_preproc_tokenization.ipynb).\n\
-          \n    Reads the temporal splits from data/TabFormer/temporal_split/ (produced\n\
-          \    by notebook 01), runs FinancialTokenizerPipeline.preprocess() to derive\n\
+          \ *\n\ndef tokenize_transactions(work_dir: str, force_rerun: bool = False)\
+          \ -> str:\n    \"\"\"Run the GPU-accelerated financial tokeniser and write\
+          \ text corpora.\n\n    True decorated component \u2014 calls src/ directly.\n\
+          \    Contrast with nemo_tfm_pipeline.py which uses papermill to run the\n\
+          \    equivalent notebook (02_seq_preproc_tokenization.ipynb).\n\n    Reads\
+          \ the temporal splits from data/TabFormer/temporal_split/ (produced\n  \
+          \  by notebook 01), runs FinancialTokenizerPipeline.preprocess() to derive\n\
           \    the 12 pipeline columns, then calls fit_transform() and to_corpus_lines()\n\
           \    to produce text sequences in the format expected by NeMo AutoModel:\n\
           \n        <bos> AMT_3 MERCH_1498 CAT_RETAIL ... CUST_42 <sep> AMT_1 ...\
@@ -1007,14 +1051,16 @@ deploymentSpec:
           \n    MERCHANT_HASH_SIZE = 2000\n    CHUNK_SIZE = 315  # ~4096 tokens at\
           \ 12 tokens/txn + separators\n\n    temporal_dir = os.path.join(work_dir,\
           \ \"data\", \"TabFormer\", \"temporal_split\")\n    corpus_dir   = os.path.join(work_dir,\
-          \ \"data\", \"decoder_corpus\")\n    os.makedirs(corpus_dir, exist_ok=True)\n\
-          \n    splits = [\n        (\"train\", os.path.join(temporal_dir, \"train.parquet\"\
-          ),\n                  os.path.join(corpus_dir, \"train_corpus.txt\")),\n\
-          \        (\"val\",   os.path.join(temporal_dir, \"val.parquet\"),\n    \
-          \              os.path.join(corpus_dir, \"val_corpus.txt\")),\n        (\"\
-          test\",  os.path.join(temporal_dir, \"test.parquet\"),\n               \
-          \   os.path.join(corpus_dir, \"test_corpus.txt\")),\n    ]\n\n    for split_name,\
-          \ parquet_path, corpus_path in splits:\n        if os.path.exists(corpus_path):\n\
+          \ \"data\", \"decoder_corpus\")\n\n    if force_rerun and os.path.exists(corpus_dir):\n\
+          \        import shutil\n        shutil.rmtree(corpus_dir)\n        print(\"\
+          force_rerun=True \u2014 cleared existing corpus\")\n\n    os.makedirs(corpus_dir,\
+          \ exist_ok=True)\n\n    splits = [\n        (\"train\", os.path.join(temporal_dir,\
+          \ \"train.parquet\"),\n                  os.path.join(corpus_dir, \"train_corpus.txt\"\
+          )),\n        (\"val\",   os.path.join(temporal_dir, \"val.parquet\"),\n\
+          \                  os.path.join(corpus_dir, \"val_corpus.txt\")),\n    \
+          \    (\"test\",  os.path.join(temporal_dir, \"test.parquet\"),\n       \
+          \           os.path.join(corpus_dir, \"test_corpus.txt\")),\n    ]\n\n \
+          \   for split_name, parquet_path, corpus_path in splits:\n        if os.path.exists(corpus_path):\n\
           \            n_lines = sum(1 for _ in open(corpus_path))\n            print(f\"\
           [{split_name}] Corpus already exists: {n_lines:,} sequences \u2014 skipping\"\
           )\n            continue\n\n        print(f\"\\n{'='*60}\")\n        print(f\"\
@@ -1078,13 +1124,13 @@ deploymentSpec:
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
           \ *\n\ndef train_foundation_model(\n    work_dir:    str,\n    corpus_dir:\
-          \  str,\n    config_path: str = \"configs/pretrain_financial_decoder.yaml\"\
-          ,\n    max_steps:   int = 30,\n) -> str:\n    \"\"\"Run NeMo decoder pretraining\
-          \ via torchrun.\n\n    True decorated component \u2014 calls src/ directly.\n\
-          \    Contrast with nemo_tfm_pipeline.py which uses papermill to run the\n\
-          \    equivalent notebook (03_foundation_model_training.ipynb).\n\n    Wraps\
-          \ torchrun --nproc-per-node=1 around scripts/train_decoder_model.py,\n \
-          \   passing the supplied YAML config and max_steps override. Single-GPU\
+          \  str,\n    config_path: str  = \"configs/pretrain_financial_decoder.yaml\"\
+          ,\n    max_steps:   int  = 30,\n    force_rerun: bool = False,\n) -> str:\n\
+          \    \"\"\"Run NeMo decoder pretraining via torchrun.\n\n    True decorated\
+          \ component \u2014 calls src/ directly.\n    Contrast with nemo_tfm_pipeline.py\
+          \ which uses papermill to run the\n    equivalent notebook (03_foundation_model_training.ipynb).\n\
+          \n    Wraps torchrun --nproc-per-node=1 around scripts/train_decoder_model.py,\n\
+          \    passing the supplied YAML config and max_steps override. Single-GPU\
           \ inside\n    the KFP component container. For multi-node distributed training,\
           \ use\n    openshift/training/pytorchjob.yaml (KFTO PyTorchJob) instead\
           \ \u2014 the KFP\n    pipeline can submit a PyTorchJob and poll for completion\
@@ -1104,13 +1150,18 @@ deploymentSpec:
           \ to models/decoder-demo/checkpoints/ on the shared PVC.\n    \"\"\"\n \
           \   import os\n    import sys\n    import subprocess\n\n    # True decorated\
           \ component \u2014 calls src/ directly.\n    sys.path.insert(0, work_dir)\n\
-          \    os.environ[\"HOME\"] = \"/tmp\"\n\n    abs_config   = os.path.join(work_dir,\
-          \ config_path)\n    train_script = os.path.join(work_dir, \"scripts\", \"\
-          train_decoder_model.py\")\n    train_corpus = os.path.join(corpus_dir, \"\
-          train_corpus.txt\")\n    val_corpus   = os.path.join(corpus_dir, \"val_corpus.txt\"\
-          )\n\n    print(f\"NeMo pretraining: max_steps={max_steps}\")\n    print(f\"\
-          \  Config:         {abs_config}\")\n    print(f\"  Train corpus:   {train_corpus}\"\
-          )\n    print(f\"  Val corpus:     {val_corpus}\")\n\n    env = os.environ.copy()\n\
+          \    os.environ[\"HOME\"] = \"/tmp\"\n\n    if force_rerun:\n        import\
+          \ shutil\n        checkpoint_dir_to_clear = os.path.join(work_dir, \"models\"\
+          , \"decoder-demo\")\n        if os.path.exists(checkpoint_dir_to_clear):\n\
+          \            shutil.rmtree(checkpoint_dir_to_clear)\n            print(\"\
+          force_rerun=True \u2014 cleared existing decoder-demo checkpoint\")\n\n\
+          \    abs_config   = os.path.join(work_dir, config_path)\n    train_script\
+          \ = os.path.join(work_dir, \"scripts\", \"train_decoder_model.py\")\n  \
+          \  train_corpus = os.path.join(corpus_dir, \"train_corpus.txt\")\n    val_corpus\
+          \   = os.path.join(corpus_dir, \"val_corpus.txt\")\n\n    print(f\"NeMo\
+          \ pretraining: max_steps={max_steps}\")\n    print(f\"  Config:        \
+          \ {abs_config}\")\n    print(f\"  Train corpus:   {train_corpus}\")\n  \
+          \  print(f\"  Val corpus:     {val_corpus}\")\n\n    env = os.environ.copy()\n\
           \    env[\"PYTHONPATH\"] = work_dir + \":\" + env.get(\"PYTHONPATH\", \"\
           \")\n\n    cmd = [\n        \"torchrun\", \"--nproc-per-node=1\",\n    \
           \    train_script,\n        \"-c\", abs_config,\n        f\"--dataset.data_path={train_corpus}\"\
@@ -1148,6 +1199,8 @@ root:
         - tokenize-transactions
         inputs:
           parameters:
+            pipelinechannel--force_rerun:
+              componentInputParameter: force_rerun
             pipelinechannel--max_steps:
               componentInputParameter: max_steps
             pipelinechannel--mode:
@@ -1168,28 +1221,42 @@ root:
           name: comp-tokenize-transactions
         inputs:
           parameters:
+            force_rerun:
+              componentInputParameter: force_rerun
             work_dir:
               componentInputParameter: work_dir
         taskInfo:
           name: tokenize-transactions
   inputDefinitions:
     parameters:
+      force_rerun:
+        defaultValue: false
+        description: "if present \u2014 makes repeated demo runs fast.\nTrue: clear\
+          \ and regenerate all intermediate outputs.\nAlways set True for train mode\
+          \ to avoid stale demo\nartifacts contaminating results."
+        isOptional: true
+        parameterType: BOOLEAN
       max_steps:
         defaultValue: 30.0
-        description: 30 = demo; increase for real training runs.
+        description: '30   = demo capability proof (fast).
+
+          500+ = meaningful training.
+
+          3000 = full NVIDIA equivalent (use H200s).'
         isOptional: true
         parameterType: NUMBER_INTEGER
       mode:
         defaultValue: demo
+        description: or "train" (all steps including NeMo pretraining).
         isOptional: true
         parameterType: STRING
       model_path:
         defaultValue: models/decoder-foundation-model
         description: 'Default: models/decoder-foundation-model/ (Git LFS,
 
-          3000-step NVIDIA checkpoint). Relative paths are resolved
+          3000-step NVIDIA checkpoint). Relative paths are
 
-          from work_dir inside extract_embeddings.'
+          resolved from work_dir inside extract_embeddings.'
         isOptional: true
         parameterType: STRING
       work_dir:

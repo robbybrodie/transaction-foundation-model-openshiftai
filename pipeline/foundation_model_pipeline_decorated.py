@@ -109,23 +109,32 @@ def _configure_task(task):
 
 @dsl.pipeline(name=PIPELINE_NAME, description=PIPELINE_DESCRIPTION)
 def foundation_model_pipeline_decorated(
-    work_dir:   str = WORK_DIR,
-    mode:       str = "demo",
-    model_path: str = "models/decoder-foundation-model",
-    max_steps:  int = 30,
+    work_dir:    str  = WORK_DIR,
+    mode:        str  = "demo",
+    model_path:  str  = "models/decoder-foundation-model",
+    max_steps:   int  = 30,
+    force_rerun: bool = False,
 ):
     """Switchable end-to-end pipeline using true decorated components.
 
     Parameters
     ----------
-    work_dir   : str — absolute path to the cloned repo on the shared PVC.
-    mode       : str — "demo" (skip training, ~20-30 min) or "train" (all steps).
-    model_path : str — path to model checkpoint for embedding extraction.
-                       Default: models/decoder-foundation-model/ (Git LFS,
-                       3000-step NVIDIA checkpoint). Relative paths are resolved
-                       from work_dir inside extract_embeddings.
-    max_steps  : int — training steps passed to train_foundation_model.
-                       30 = demo; increase for real training runs.
+    work_dir    : str  — absolute path to the cloned repo on the shared PVC.
+    mode        : str  — "demo" (default, skip training, ~20-30 min on L4)
+                         or "train" (all steps including NeMo pretraining).
+    model_path  : str  — path to model checkpoint for embedding extraction.
+                         Default: models/decoder-foundation-model/ (Git LFS,
+                         3000-step NVIDIA checkpoint). Relative paths are
+                         resolved from work_dir inside extract_embeddings.
+    max_steps   : int  — training steps; only used when mode="train".
+                         30   = demo capability proof (fast).
+                         500+ = meaningful training.
+                         3000 = full NVIDIA equivalent (use H200s).
+    force_rerun : bool — False (default): reuse existing corpus/embeddings
+                         if present — makes repeated demo runs fast.
+                         True: clear and regenerate all intermediate outputs.
+                         Always set True for train mode to avoid stale demo
+                         artifacts contaminating results.
     """
 
     # ------------------------------------------------------------------
@@ -133,7 +142,7 @@ def foundation_model_pipeline_decorated(
     # Replaces: papermill on 02_seq_preproc_tokenization.ipynb
     # Returns: corpus_dir (data/decoder_corpus/)
     # ------------------------------------------------------------------
-    s1 = tokenize_transactions(work_dir=work_dir)
+    s1 = tokenize_transactions(work_dir=work_dir, force_rerun=force_rerun)
     s1.set_cpu_request("4").set_memory_request("32G")
     s1.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
     _configure_task(s1)
@@ -154,6 +163,7 @@ def foundation_model_pipeline_decorated(
             work_dir=work_dir,
             corpus_dir=s1.output,
             max_steps=max_steps,
+            force_rerun=force_rerun,
         )
         s2t.set_cpu_request("8").set_memory_request("64G")
         s2t.set_accelerator_type("nvidia.com/gpu").set_accelerator_limit(1)
@@ -168,6 +178,7 @@ def foundation_model_pipeline_decorated(
         s3t = extract_embeddings(
             work_dir=work_dir,
             model_path=model_path,
+            force_rerun=force_rerun,
         )
         s3t.after(s2t)
         s3t.set_cpu_request("4").set_memory_request("32G")
@@ -199,6 +210,7 @@ def foundation_model_pipeline_decorated(
         s3d = extract_embeddings(
             work_dir=work_dir,
             model_path=model_path,
+            force_rerun=force_rerun,
         )
         s3d.after(s1)
         s3d.set_cpu_request("4").set_memory_request("32G")
